@@ -30,6 +30,10 @@ func (r *Repository) Enqueue(ctx context.Context, tx pgx.Tx, message Message) er
 	if err := message.Validate(); err != nil {
 		return err
 	}
+	availableAt := message.AvailableAt
+	if availableAt.IsZero() {
+		availableAt = time.Now().UTC()
+	}
 	headers, err := EncodeHeaders(nil)
 	if err != nil {
 		return fmt.Errorf("encode outbox headers: %w", err)
@@ -37,11 +41,11 @@ func (r *Repository) Enqueue(ctx context.Context, tx pgx.Tx, message Message) er
 	_, err = tx.Exec(ctx, `
 INSERT INTO outbox_messages (
     id, message_id, message_type, schema_version, exchange, routing_key,
-    occurred_at, trace_id, correlation_id, causation_id, payload, headers
-) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`,
+    occurred_at, trace_id, correlation_id, causation_id, payload, headers, available_at
+) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)`,
 		message.ID, message.Envelope.MessageID, message.Envelope.MessageType, message.Envelope.SchemaVersion,
 		message.Exchange, message.RoutingKey, message.Envelope.OccurredAt, message.Envelope.TraceID,
-		message.Envelope.CorrelationID, message.Envelope.CausationID, []byte(message.Envelope.Payload), headers)
+		message.Envelope.CorrelationID, message.Envelope.CausationID, []byte(message.Envelope.Payload), headers, availableAt)
 	if err != nil {
 		return fmt.Errorf("insert outbox message: %w", err)
 	}

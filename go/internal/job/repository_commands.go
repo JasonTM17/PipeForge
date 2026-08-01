@@ -116,7 +116,7 @@ VALUES ($1, $2, $3, $4, $5)`, uuid.New(), item.ID, attemptNumber, AttemptCreated
 	}
 	if _, err := tx.Exec(ctx, `
 UPDATE processing_jobs
-SET state = $2, queued_at = $3, updated_at = $3, cancel_requested_at = NULL,
+SET state = $2, queued_at = $3, next_attempt_at = NULL, updated_at = $3, cancel_requested_at = NULL,
     last_error_code = NULL, last_error_message = NULL
 WHERE id = $1`, item.ID, StateQueued, now); err != nil {
 		return Job{}, fmt.Errorf("queue job retry: %w", err)

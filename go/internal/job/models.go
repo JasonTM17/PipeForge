@@ -62,6 +62,7 @@ type Job struct {
 	CreatedAt          time.Time   `json:"createdAt"`
 	UpdatedAt          time.Time   `json:"updatedAt"`
 	QueuedAt           *time.Time  `json:"queuedAt,omitempty"`
+	NextAttemptAt      *time.Time  `json:"nextAttemptAt,omitempty"`
 	StartedAt          *time.Time  `json:"startedAt,omitempty"`
 	CancelRequestedAt  *time.Time  `json:"cancelRequestedAt,omitempty"`
 	CompletedAt        *time.Time  `json:"completedAt,omitempty"`
@@ -172,16 +173,20 @@ func ValidateTransition(from, to string) error {
 			StateFailedPermanent: {},
 		},
 		StateLeased: {
+			StateQueued:           {},
 			StateRunning:         {},
 			StateCancelRequested: {},
 			StateFailedRetryable: {},
 			StateFailedPermanent: {},
+			StateDeadLettered:    {},
 		},
 		StateRunning: {
+			StateQueued:           {},
 			StateSucceeded:       {},
 			StateFailedRetryable: {},
 			StateFailedPermanent: {},
 			StateCancelRequested: {},
+			StateDeadLettered:    {},
 		},
 		StateFailedRetryable: {
 			StateQueued:       {},

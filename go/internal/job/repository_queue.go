@@ -18,7 +18,7 @@ func (r *Repository) SelectQueued(ctx context.Context, query QueueQuery) ([]Queu
 	rows, err := tx.Query(ctx, `
 SELECT j.id, j.owner_user_id, j.dataset_version_id, j.state, j.operations,
        j.request_fingerprint, j.priority, j.max_attempts, j.created_at, j.updated_at,
-       j.queued_at, j.started_at, j.cancel_requested_at, j.completed_at, j.finished_at,
+	       j.queued_at, j.next_attempt_at, j.started_at, j.cancel_requested_at, j.completed_at, j.finished_at,
        j.last_error_code, j.last_error_message, a.id
 FROM processing_jobs j
 JOIN LATERAL (
@@ -29,6 +29,7 @@ JOIN LATERAL (
     LIMIT 1
 ) a ON TRUE
 WHERE j.state = $1
+  AND (j.next_attempt_at IS NULL OR j.next_attempt_at <= NOW())
 ORDER BY j.priority DESC, j.created_at, j.id
 LIMIT $2
 FOR UPDATE OF j SKIP LOCKED`, StateQueued, query.Limit)
@@ -43,7 +44,7 @@ FOR UPDATE OF j SKIP LOCKED`, StateQueued, query.Limit)
 		if err := rows.Scan(
 			&item.ID, &item.OwnerUserID, &item.DatasetVersionID, &item.State, &operations,
 			&item.RequestFingerprint, &item.Priority, &item.MaxAttempts, &item.CreatedAt, &item.UpdatedAt,
-			&item.QueuedAt, &item.StartedAt, &item.CancelRequestedAt, &item.CompletedAt, &item.FinishedAt,
+			&item.QueuedAt, &item.NextAttemptAt, &item.StartedAt, &item.CancelRequestedAt, &item.CompletedAt, &item.FinishedAt,
 			&item.LastErrorCode, &item.LastErrorMessage, &item.AttemptID,
 		); err != nil {
 			return nil, fmt.Errorf("scan queued job: %w", err)

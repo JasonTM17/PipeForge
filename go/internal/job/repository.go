@@ -72,7 +72,7 @@ LIMIT $3 OFFSET $4`, query.OwnerUserID, query.State, query.PageSize, (query.Page
 const jobSelect = `
 SELECT j.id, j.owner_user_id, j.dataset_version_id, j.state, j.operations,
        j.request_fingerprint, j.priority, j.max_attempts, j.created_at, j.updated_at,
-       j.queued_at, j.started_at, j.cancel_requested_at, j.completed_at, j.finished_at,
+	       j.queued_at, j.next_attempt_at, j.started_at, j.cancel_requested_at, j.completed_at, j.finished_at,
        j.last_error_code, j.last_error_message
 FROM processing_jobs j `
 
@@ -86,7 +86,7 @@ func scanJob(row scannable) (Job, error) {
 	if err := row.Scan(
 		&item.ID, &item.OwnerUserID, &item.DatasetVersionID, &item.State, &operations,
 		&item.RequestFingerprint, &item.Priority, &item.MaxAttempts, &item.CreatedAt, &item.UpdatedAt,
-		&item.QueuedAt, &item.StartedAt, &item.CancelRequestedAt, &item.CompletedAt, &item.FinishedAt,
+		&item.QueuedAt, &item.NextAttemptAt, &item.StartedAt, &item.CancelRequestedAt, &item.CompletedAt, &item.FinishedAt,
 		&item.LastErrorCode, &item.LastErrorMessage,
 	); err != nil {
 		return Job{}, err
