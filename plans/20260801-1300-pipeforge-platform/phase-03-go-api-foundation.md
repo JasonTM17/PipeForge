@@ -1,10 +1,12 @@
 ---
 phase: 3
-title: "Go API foundation"
-status: pending
+title: Go API foundation
+status: in-progress
 priority: P1
-effort: "3d"
-dependencies: [1, 2]
+effort: 3d
+dependencies:
+  - 1
+  - 2
 ---
 
 # Phase 3: Go API foundation
