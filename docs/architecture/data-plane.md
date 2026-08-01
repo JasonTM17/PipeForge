@@ -29,6 +29,16 @@ time-throttled progress snapshots. It does not decide authoritative job state,
 promote artifacts, or publish success events; those responsibilities remain in
 the Go result/lease workflow.
 
+## Quality validation
+
+Quality rules are copied into the job operation at creation time. The Python
+worker validates that snapshot again before dispatch, evaluates rules across
+bounded chunks, and emits `quality.report.v1` with passed/failed/error/skipped
+statuses, counts, percentages, duration, and capped row-number/hash references.
+Missing columns are deterministic rule errors; disabled rules are skipped.
+Arbitrary expressions are intentionally unsupported, so no `eval`, `exec`, or
+user-supplied imports are reachable from a job command.
+
 ```mermaid
 flowchart LR
     Command["Validated job command"] --> Detect["Detect format"]
