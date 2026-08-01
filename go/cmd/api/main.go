@@ -67,7 +67,10 @@ func run() error {
 		Identity: identityService,
 		Dataset:  datasetService,
 		Readiness: func(ctx context.Context) error {
-			return pool.Ping(ctx)
+			if err := pool.Ping(ctx); err != nil {
+				return err
+			}
+			return objectStore.Ping(ctx)
 		},
 	})
 	server := &http.Server{Addr: cfg.HTTPAddr, Handler: router}
