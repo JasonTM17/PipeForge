@@ -1,6 +1,8 @@
 # Local agent/tooling state
 .claude/
 .codex/
+/AGENTS.md
+/CLAUDE.md
 
 # Environment and secrets
 .env
@@ -47,4 +49,3 @@ Thumbs.db
 .vscode/*
 !.vscode/settings.json
 !.vscode/extensions.json
-
