@@ -1,10 +1,13 @@
 ---
 phase: 12
-title: "Data quality"
-status: pending
+title: Data quality
+status: in-progress
 priority: P1
-effort: "5d"
-dependencies: [8, 10, 11]
+effort: 5d
+dependencies:
+  - 8
+  - 10
+  - 11
 ---
 
 # Phase 12: Data quality
