@@ -70,7 +70,7 @@ PipeForge is a from-scratch monorepo for distributed dataset processing. The Go 
 | Phase | Name | Status |
 |-------|------|--------|
 | 1 | [Foundation](./phase-01-foundation.md) | Completed |
-| 2 | [Infrastructure](./phase-02-infrastructure.md) | Pending |
+| 2 | [Infrastructure](./phase-02-infrastructure.md) | Completed |
 | 3 | [Go API foundation](./phase-03-go-api-foundation.md) | Pending |
 | 4 | [Identity](./phase-04-identity.md) | Pending |
 | 5 | [Dataset metadata](./phase-05-dataset-metadata.md) | Pending |

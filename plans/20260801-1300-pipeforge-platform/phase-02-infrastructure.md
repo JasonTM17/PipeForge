@@ -1,10 +1,11 @@
 ---
 phase: 2
-title: "Infrastructure"
-status: pending
+title: Infrastructure
+status: completed
 priority: P1
-effort: "1d"
-dependencies: [1]
+effort: 1d
+dependencies:
+  - 1
 ---
 
 # Phase 2: Infrastructure
