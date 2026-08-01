@@ -36,7 +36,7 @@ The completed local environment will require:
 - Python 3.12+ with a virtual environment
 - GNU Make or the documented PowerShell equivalents
 
-No cloud account or production credential is required for local development. Copy `.env.example` to `.env` only after the infrastructure phase adds it; never commit `.env`.
+No cloud account or production credential is required for local development. `.env.example` currently contains blank placeholders; infrastructure phases will make the keys active. Copy it to `.env` locally when needed and never commit `.env`.
 
 ## Current foundation checks
 
@@ -73,4 +73,3 @@ The full A-to-Z plan is [here](plans/20260801-1300-pipeforge-platform/plan.md), 
 ## License
 
 License selection is intentionally deferred until the project owner chooses one. Do not assume an open-source license from this repository alone.
-
