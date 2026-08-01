@@ -108,3 +108,30 @@ func TestValidateOperationsAcceptsBoundedProfileConfig(t *testing.T) {
 		t.Fatalf("expected unknown profile field to fail, got %v", err)
 	}
 }
+
+func TestValidateOperationsAcceptsQualitySnapshotAndRejectsCustomExpression(t *testing.T) {
+	valid := []Operation{{
+		Type: "VALIDATE_QUALITY",
+		Config: map[string]any{
+			"rules": []any{map[string]any{
+				"id": "email-required", "name": "Email is required", "columnScope": []any{"email"},
+				"ruleType": "NOT_NULL", "configuration": map[string]any{}, "severity": "ERROR", "enabled": true,
+			}},
+		},
+	}}
+	if err := ValidateOperations(valid); err != nil {
+		t.Fatalf("expected quality snapshot to pass: %v", err)
+	}
+	unsafe := []Operation{{
+		Type: "VALIDATE_QUALITY",
+		Config: map[string]any{
+			"rules": []any{map[string]any{
+				"id": "custom", "name": "unsafe", "columnScope": []any{"value"},
+				"ruleType": "CUSTOM_EXPRESSION", "configuration": map[string]any{"expression": "__import__('os')"}, "severity": "ERROR", "enabled": true,
+			}},
+		},
+	}}
+	if err := ValidateOperations(unsafe); !errors.Is(err, ErrInvalidInput) {
+		t.Fatalf("expected custom expression to fail closed, got %v", err)
+	}
+}

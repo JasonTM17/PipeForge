@@ -10,6 +10,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/JasonTM17/PipeForge/go/internal/quality"
 	"github.com/google/uuid"
 )
 
@@ -85,6 +86,13 @@ func ValidateOperations(operations []Operation) error {
 			method, ok := operation.Config["method"].(string)
 			if !ok || (method != "IQR" && method != "Z_SCORE") {
 				return fmt.Errorf("%w: operation %d method must be IQR or Z_SCORE", ErrInvalidInput, index)
+			}
+		case "VALIDATE_QUALITY":
+			if err := validateConfigKeys(operation.Config, "rules"); err != nil {
+				return fmt.Errorf("%w: operation %d config: %v", ErrInvalidInput, index, err)
+			}
+			if err := quality.ValidateSnapshotRules(operation.Config["rules"]); err != nil {
+				return fmt.Errorf("%w: operation %d quality rules: %v", ErrInvalidInput, index, err)
 			}
 		default:
 			return fmt.Errorf("%w: operation %d type %q is not supported", ErrInvalidInput, index, operationType)
