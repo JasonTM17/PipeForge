@@ -38,24 +38,29 @@ The completed local environment will require:
 
 No cloud account or production credential is required for local development. `.env.example` currently contains blank placeholders; infrastructure phases will make the keys active. Copy it to `.env` locally when needed and never commit `.env`.
 
-## Current foundation checks
+## Current local environment
 
-At this foundation commit, the repository has no runnable service yet. You can inspect the plan and validate the worktree:
+The dependency stack is now runnable; Go/Python application services are added in later phases. Start PostgreSQL, RabbitMQ, MinIO, and the initialization jobs with:
+
+```text
+copy .env.example .env
+make bootstrap
+```
+
+Optional monitoring services:
+
+```text
+docker compose --profile monitoring up -d prometheus grafana
+```
+
+Default host ports are isolated from common local stacks: PostgreSQL `55433`, RabbitMQ `55672`/management `55673`, MinIO `59010`/console `59011`, Prometheus `59090`, and Grafana `53010`. Change them in `.env` if needed.
+
+The database migration and complete application startup commands (`make migrate`, `make dev` with Go/Python services) will be added only with their actual implementation and validation. You can inspect the plan and validate the worktree at any time:
 
 ```powershell
 git status --short
 Get-Content plans/20260801-1300-pipeforge-platform/plan.md
 ```
-
-After Phase 2, the documented startup path will be:
-
-```text
-make bootstrap
-make migrate
-make dev
-```
-
-The commands will be added only with their actual implementation and validation.
 
 ## Engineering rules
 
