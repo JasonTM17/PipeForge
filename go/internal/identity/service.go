@@ -3,6 +3,7 @@ package identity
 import (
 	"context"
 	"errors"
+	"fmt"
 	"time"
 
 	"github.com/JasonTM17/PipeForge/go/internal/auth"
@@ -43,11 +44,11 @@ func (s *Service) Register(ctx context.Context, email, password, requestID strin
 	}
 	normalizedEmail, err := normalizeEmail(email)
 	if err != nil {
-		return User{}, TokenPair{}, err
+		return User{}, TokenPair{}, fmt.Errorf("%w: %v", ErrInvalidInput, err)
 	}
 	passwordHash, err := s.PasswordHasher.Hash(password)
 	if err != nil {
-		return User{}, TokenPair{}, err
+		return User{}, TokenPair{}, fmt.Errorf("%w: %v", ErrInvalidInput, err)
 	}
 	user, err := s.Store.CreateUser(ctx, normalizedEmail, passwordHash, auth.RoleUser, authz.DefaultUserScopes())
 	if err != nil {

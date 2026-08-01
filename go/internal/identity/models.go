@@ -18,6 +18,7 @@ var (
 	ErrRefreshTokenExpired   = errors.New("refresh token expired")
 	ErrAPIKeyNotFound        = errors.New("API key not found")
 	ErrAPIKeyInvalid         = errors.New("invalid API key")
+	ErrInvalidInput          = errors.New("invalid identity input")
 	ErrIdentityConfiguration = errors.New("invalid identity configuration")
 )
 

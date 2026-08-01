@@ -19,7 +19,7 @@ func (s *Service) CreateAPIKey(ctx context.Context, principal auth.Principal, na
 	}
 	validatedName, err := validateAPIKeyName(name)
 	if err != nil {
-		return CreatedAPIKey{}, err
+		return CreatedAPIKey{}, fmt.Errorf("%w: %v", ErrInvalidInput, err)
 	}
 	if len(scopes) == 0 {
 		return CreatedAPIKey{}, authz.ErrInvalidScope

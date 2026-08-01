@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/JasonTM17/PipeForge/go/internal/identity"
 	"github.com/JasonTM17/PipeForge/go/internal/observability"
 	"github.com/go-chi/chi/v5"
 )
@@ -15,6 +16,7 @@ type Dependencies struct {
 	Logger    *slog.Logger
 	Metrics   *observability.Metrics
 	Readiness func(context.Context) error
+	Identity  *identity.Service
 }
 
 func NewRouter(deps Dependencies) http.Handler {
@@ -35,6 +37,9 @@ func NewRouter(deps Dependencies) http.Handler {
 	router.Get("/health/live", liveHandler)
 	router.Get("/health/ready", readyHandler(deps.Readiness))
 	router.Handle("/metrics", deps.Metrics.Handler())
+	if deps.Identity != nil {
+		registerIdentityRoutes(router, deps.Identity)
+	}
 	return router
 }
 

@@ -10,6 +10,7 @@ import (
 	"syscall"
 
 	"github.com/JasonTM17/PipeForge/go/internal/httpapi"
+	"github.com/JasonTM17/PipeForge/go/internal/identity"
 	"github.com/JasonTM17/PipeForge/go/internal/observability"
 	"github.com/JasonTM17/PipeForge/go/internal/platform/config"
 	"github.com/JasonTM17/PipeForge/go/internal/platform/database"
@@ -38,11 +39,16 @@ func run() error {
 		return err
 	}
 	defer pool.Close()
+	identityService, err := identity.NewService(identity.NewRepository(pool), cfg)
+	if err != nil {
+		return err
+	}
 
 	metrics := observability.NewMetrics()
 	router := httpapi.NewRouter(httpapi.Dependencies{
-		Logger:  logger,
-		Metrics: metrics,
+		Logger:   logger,
+		Metrics:  metrics,
+		Identity: identityService,
 		Readiness: func(ctx context.Context) error {
 			return pool.Ping(ctx)
 		},
