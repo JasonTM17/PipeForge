@@ -30,6 +30,9 @@ const (
 	defaultMultipartURLTTL          = 15 * time.Minute
 	defaultMultipartCompletionGrace = time.Hour
 	defaultMultipartCleanupLimit    = 100
+	defaultLeaseDuration            = 2 * time.Minute
+	defaultLeaseRenewalWindow       = 2 * time.Minute
+	defaultLeaseSweepLimit          = 100
 )
 
 // Config contains validated runtime settings. Secrets are kept in memory only
@@ -64,6 +67,9 @@ type Config struct {
 	MultipartURLTTL          time.Duration
 	MultipartCompletionGrace time.Duration
 	MultipartCleanupLimit    int
+	LeaseDuration            time.Duration
+	LeaseRenewalWindow       time.Duration
+	LeaseSweepLimit          int
 }
 
 // Load reads environment variables through getenv so tests can provide a
@@ -117,6 +123,9 @@ func Load(getenv func(string) string) (Config, error) {
 		MultipartURLTTL:          defaultMultipartURLTTL,
 		MultipartCompletionGrace: defaultMultipartCompletionGrace,
 		MultipartCleanupLimit:    defaultMultipartCleanupLimit,
+		LeaseDuration:            defaultLeaseDuration,
+		LeaseRenewalWindow:       defaultLeaseRenewalWindow,
+		LeaseSweepLimit:          defaultLeaseSweepLimit,
 	}
 
 	port, err := parseUint16(valueOrDefault(getenv("POSTGRES_PORT"), "5432"))
@@ -220,6 +229,25 @@ func Load(getenv func(string) string) (Config, error) {
 		}
 		cfg.MultipartCleanupLimit = cleanupLimit
 	}
+	if raw := getenv("PIPEFORGE_LEASE_DURATION"); raw != "" {
+		cfg.LeaseDuration, err = parsePositiveDuration(raw, "PIPEFORGE_LEASE_DURATION")
+		if err != nil {
+			return Config{}, err
+		}
+	}
+	if raw := getenv("PIPEFORGE_LEASE_RENEWAL_WINDOW"); raw != "" {
+		cfg.LeaseRenewalWindow, err = parsePositiveDuration(raw, "PIPEFORGE_LEASE_RENEWAL_WINDOW")
+		if err != nil {
+			return Config{}, err
+		}
+	}
+	if raw := getenv("PIPEFORGE_LEASE_SWEEP_LIMIT"); raw != "" {
+		sweepLimit, parseErr := strconv.Atoi(raw)
+		if parseErr != nil || sweepLimit < 1 || sweepLimit > 1000 {
+			return Config{}, errors.New("PIPEFORGE_LEASE_SWEEP_LIMIT must be between 1 and 1000")
+		}
+		cfg.LeaseSweepLimit = sweepLimit
+	}
 
 	if err := cfg.validate(); err != nil {
 		return Config{}, err
@@ -260,7 +288,7 @@ func (c Config) validate() error {
 	if strings.TrimSpace(c.DatabaseHost) == "" || strings.TrimSpace(c.DatabaseName) == "" || strings.TrimSpace(c.DatabaseUser) == "" {
 		return errors.New("PostgreSQL host, database, and user must not be empty")
 	}
-	if c.DatabasePort == 0 || c.DatabaseMaxConns < 1 || c.ShutdownTimeout <= 0 || c.AccessTokenTTL <= 0 || c.RefreshTokenTTL <= 0 || c.MaxUploadBytes <= 0 || c.MultipartPartSize < 5*1024*1024 || c.MultipartPartSize > 5*1024*1024*1024 || c.MultipartMaxParts < 1 || c.MultipartMaxParts > 10000 || c.MultipartMaxBytes <= 0 || c.MultipartSessionTTL <= 0 || c.MultipartURLTTL <= 0 || c.MultipartURLTTL > 7*24*time.Hour || c.MultipartCompletionGrace <= 0 || c.MultipartCleanupLimit < 1 || c.MultipartCleanupLimit > 1000 {
+	if c.DatabasePort == 0 || c.DatabaseMaxConns < 1 || c.ShutdownTimeout <= 0 || c.AccessTokenTTL <= 0 || c.RefreshTokenTTL <= 0 || c.MaxUploadBytes <= 0 || c.MultipartPartSize < 5*1024*1024 || c.MultipartPartSize > 5*1024*1024*1024 || c.MultipartMaxParts < 1 || c.MultipartMaxParts > 10000 || c.MultipartMaxBytes <= 0 || c.MultipartSessionTTL <= 0 || c.MultipartURLTTL <= 0 || c.MultipartURLTTL > 7*24*time.Hour || c.MultipartCompletionGrace <= 0 || c.MultipartCleanupLimit < 1 || c.MultipartCleanupLimit > 1000 || c.LeaseDuration <= 0 || c.LeaseDuration > 30*time.Minute || c.LeaseRenewalWindow <= 0 || c.LeaseRenewalWindow > 30*time.Minute || c.LeaseSweepLimit < 1 || c.LeaseSweepLimit > 1000 {
 		return errors.New("PostgreSQL, connection, timeout, upload, and multipart limits must be positive and bounded")
 	}
 	if c.MultipartMaxBytes < c.MultipartPartSize || c.MultipartMaxBytes > c.MultipartPartSize*int64(c.MultipartMaxParts) {

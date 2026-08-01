@@ -8,7 +8,9 @@ import (
 	"time"
 
 	"github.com/JasonTM17/PipeForge/go/internal/dataset"
+	"github.com/JasonTM17/PipeForge/go/internal/lease"
 	"github.com/JasonTM17/PipeForge/go/internal/multipart"
+	"github.com/JasonTM17/PipeForge/go/internal/outbox"
 	"github.com/JasonTM17/PipeForge/go/internal/platform/config"
 	"github.com/JasonTM17/PipeForge/go/internal/platform/database"
 	"github.com/JasonTM17/PipeForge/go/internal/storage"
@@ -31,6 +33,18 @@ func run(ctx context.Context) error {
 		return err
 	}
 	defer pool.Close()
+	outboxRepository, err := outbox.NewRepository(pool)
+	if err != nil {
+		return err
+	}
+	leaseConfig := lease.DefaultConfig()
+	leaseConfig.LeaseDuration = cfg.LeaseDuration
+	leaseConfig.RenewalWindow = cfg.LeaseRenewalWindow
+	leaseConfig.SweepLimit = cfg.LeaseSweepLimit
+	leaseRepository, err := lease.NewRepository(pool, outboxRepository, leaseConfig)
+	if err != nil {
+		return err
+	}
 	objectStore, err := storage.NewMinIO(storage.MinIOConfig{
 		Endpoint: cfg.MinIOEndpoint, PublicEndpoint: cfg.MinIOPublicEndpoint, AccessKey: cfg.MinIOAccessKey, SecretKey: cfg.MinIOSecretKey,
 		Secure: cfg.MinIOSecure, PublicSecure: cfg.MinIOPublicSecure, Bucket: cfg.DatasetBucket,
@@ -55,6 +69,11 @@ func run(ctx context.Context) error {
 	if len(report.Failures) > 0 {
 		return fmt.Errorf("multipart cleanup completed with %d failures", len(report.Failures))
 	}
+	leaseReport, err := leaseRepository.SweepExpired(cleanupCtx, cfg.LeaseSweepLimit)
+	if err != nil {
+		return err
+	}
+	slog.Info("expired lease sweep completed", "claimed", leaseReport.Claimed, "retried", leaseReport.Retried, "deadLettered", leaseReport.DeadLettered)
 	return nil
 }
 
