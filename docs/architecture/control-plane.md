@@ -24,6 +24,7 @@ flowchart TB
 - State transitions are explicit, validated against the current state, and recorded in history.
 - The API never publishes a job command directly from inside the database transaction. It commits an outbox row; a separate publisher confirms delivery.
 - Result consumers insert the message ID into an inbox table and apply the state/artifact transition in the same transaction. A duplicate message is a no-op.
+- Result consumers expose only canonical artifacts. Staged objects remain attempt-scoped until a matching successful result promotes their object keys.
 - A result is accepted only when its job, attempt, lease, and worker identity match the current authoritative records.
 - Resource ownership and scope checks occur in domain services, not only in HTTP handlers.
 - Dataset version uploads stream through the Go service into MinIO; PostgreSQL records a version only after object size, checksum, and existence are verified.

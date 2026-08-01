@@ -6,7 +6,7 @@ RabbitMQ is used for durable at-least-once commands and events. The canonical de
 flowchart LR
     Commands["pipeforge.commands\ntopic exchange"] --> Jobs["processing.jobs\nmanual ack"]
     Commands --> Cancels["processing.cancellations\nmanual ack"]
-    Events["pipeforge.events\ntopic exchange"] --> Results["control-plane.results\nmanual ack"]
+    Events["pipeforge.events\ntopic exchange"] --> Results["control-plane.results\nprocessing.job.# + processing.artifact.created\nmanual ack"]
     Events --> Audit["audit.events"]
     Events --> Monitoring["monitoring.events"]
     Jobs -->|bounded reject| DLQ["pipeforge.dead-letter\ntopic exchange"]

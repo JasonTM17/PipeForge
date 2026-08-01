@@ -58,6 +58,8 @@ sequenceDiagram
 
 RabbitMQ is never contacted inside the job transaction. If outbox insertion fails, no job or quota mutation remains. If publishing is retried, the message ID and consumer idempotency rules prevent an at-least-once delivery from becoming an unbounded state mutation.
 
+When a worker result arrives, the result consumer applies the job transition only after the current attempt, lease, and worker identity are checked. The inbox row, result projection, state history, and artifact promotion commit together; the broker acknowledgement follows that commit.
+
 ## Fair selection
 
 The scheduler reads a bounded candidate window with `FOR UPDATE SKIP LOCKED`; it does not assign a worker lease in this phase. Candidates are grouped by owner and selected in round-robin passes. Priority and age order jobs within an owner, while the round-robin boundary prevents one owner with a large backlog from consuming the entire batch. Lease assignment, heartbeat renewal, and timeout recovery belong to the later lease phase.

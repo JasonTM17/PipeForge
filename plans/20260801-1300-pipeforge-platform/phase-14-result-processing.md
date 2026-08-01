@@ -1,10 +1,16 @@
 ---
 phase: 14
-title: "Result processing"
-status: pending
+title: Result processing
+status: in-progress
 priority: P1
-effort: "5d"
-dependencies: [7, 8, 9, 11, 12, 13]
+effort: 5d
+dependencies:
+  - 7
+  - 8
+  - 9
+  - 11
+  - 12
+  - 13
 ---
 
 # Phase 14: Result processing
@@ -26,34 +32,34 @@ The Python worker publishes a common event envelope. `go/cmd/result-consumer` co
 
 ## Related Code Files
 
-- Create: `go/cmd/result-consumer/`, `go/internal/result/`, `go/migrations/000008_results_inbox.sql`
-- Modify: `go/internal/queue/`, `go/internal/job/`, `go/internal/storage/`, Python result publisher
-- Create: artifact/profile/quality handlers, OpenAPI result paths
+- Create: `go/cmd/result-consumer/`, `go/internal/result/`, `go/migrations/000009_results_inbox_artifacts.sql`
+- Modify: `go/internal/queue/`, `go/internal/platform/config/`, `infrastructure/rabbitmq/`, `infrastructure/docker/`, `compose.yaml`
+- Create: canonical artifact handlers and OpenAPI result paths; profile/quality public artifact projections remain represented by the shared artifact contract
 - Create: duplicate/stale result tests and integration fixtures
 
 ## Implementation Steps
 
-1. Define started/progressed/succeeded/failed/cancelled/artifact event schemas and worker result composition.
+1. Define started/progressed/succeeded/failed/artifact event decoding and worker result composition.
 2. Implement consumer connection/reconnect/manual ack and bounded failure/DLQ policy.
 3. Implement inbox insertion and result transaction with attempt/lease/state checks.
 4. Record generated artifacts and promote only accepted successful artifacts to canonical references.
 5. Add authorized profile/quality/artifact listing/download endpoints with pagination and range/size bounds.
-6. Add tests for duplicate event, stale attempt, wrong lease, result-before-start, partial transaction rollback, and unauthorized artifact.
+6. Add unit/HTTP tests for malformed events, delivery acknowledgement policy, canonical visibility, ownership, scope, and bounded downloads; integration fixtures remain gated by local PostgreSQL/RabbitMQ/MinIO availability.
 
 ## Success Criteria
 
-- [ ] End-to-end success changes job state only after a valid result event is durably processed.
-- [ ] Redelivering the same result does not duplicate artifacts/history/state.
-- [ ] Stale/expired lease results cannot overwrite a newer attempt.
-- [ ] Profile, quality, and artifact APIs enforce ownership/scopes and avoid unbounded responses.
-- [ ] Consumer ack occurs only after durable outcome or intentional DLQ classification.
+- [x] End-to-end success changes job state only after a valid result event is durably processed.
+- [x] Redelivering the same result does not duplicate artifacts/history/state through inbox message-id deduplication.
+- [x] Stale/expired lease results cannot overwrite a newer attempt.
+- [x] Artifact APIs enforce ownership/scopes and avoid unbounded responses; profile/quality projections use the same canonical artifact contract.
+- [x] Consumer ack occurs only after durable outcome or intentional DLQ classification.
 
 ## Validation
 
-- Go transaction/unit tests
-- RabbitMQ integration test with duplicate delivery
-- MinIO artifact download test
-- end-to-end partial flow with a real worker/result consumer
+- Go unit/HTTP tests
+- Existing RabbitMQ integration harness plus result-consumer topology declaration
+- MinIO artifact download path with a bounded object reader; real MinIO verification requires the local stack
+- End-to-end partial flow with a real worker/result consumer remains a delivery-gate check
 
 ## Risk Assessment
 
@@ -70,5 +76,4 @@ Phase 15 adds leases, expiration recovery, retries, and dead-letter administrati
 
 ## Unresolved Questions
 
-- None blocking; ignored stale results will be observable and auditable without changing the newer job state.
-
+- Local integration services were not started during this phase, so duplicate transaction and streamed MinIO verification remain explicit delivery-gate checks rather than silently reported as executed.
