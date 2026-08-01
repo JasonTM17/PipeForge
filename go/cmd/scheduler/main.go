@@ -32,7 +32,7 @@ func run(ctx context.Context) error {
 	}
 	defer pool.Close()
 	objectStore, err := storage.NewMinIO(storage.MinIOConfig{
-		Endpoint: cfg.MinIOEndpoint, AccessKey: cfg.MinIOAccessKey, SecretKey: cfg.MinIOSecretKey,
+		Endpoint: cfg.MinIOEndpoint, PublicEndpoint: cfg.MinIOPublicEndpoint, AccessKey: cfg.MinIOAccessKey, SecretKey: cfg.MinIOSecretKey,
 		Secure: cfg.MinIOSecure, Bucket: cfg.DatasetBucket,
 	})
 	if err != nil {

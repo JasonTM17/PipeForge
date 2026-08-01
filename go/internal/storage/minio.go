@@ -17,31 +17,39 @@ import (
 const operationTimeout = 30 * time.Second
 
 type MinIOConfig struct {
-	Endpoint  string
-	AccessKey string
-	SecretKey string
-	Secure    bool
-	Bucket    string
+	Endpoint       string
+	PublicEndpoint string
+	AccessKey      string
+	SecretKey      string
+	Secure         bool
+	Bucket         string
 }
 
 type MinIOStore struct {
-	client *minio.Client
-	core   *minio.Core
-	bucket string
+	client        *minio.Client
+	presignClient *minio.Client
+	core          *minio.Core
+	bucket        string
 }
 
 func NewMinIO(config MinIOConfig) (*MinIOStore, error) {
 	if config.Endpoint == "" || config.AccessKey == "" || config.SecretKey == "" || config.Bucket == "" {
 		return nil, fmt.Errorf("MinIO endpoint, credentials, and bucket are required")
 	}
-	core, err := minio.NewCore(config.Endpoint, &minio.Options{
-		Creds:  credentials.NewStaticV4(config.AccessKey, config.SecretKey, ""),
-		Secure: config.Secure,
-	})
+	options := &minio.Options{Creds: credentials.NewStaticV4(config.AccessKey, config.SecretKey, ""), Secure: config.Secure}
+	core, err := minio.NewCore(config.Endpoint, options)
 	if err != nil {
 		return nil, fmt.Errorf("create MinIO client: %w", err)
 	}
-	return &MinIOStore{client: core.Client, core: core, bucket: config.Bucket}, nil
+	presignClient := core.Client
+	if strings.TrimSpace(config.PublicEndpoint) != "" && strings.TrimSpace(config.PublicEndpoint) != strings.TrimSpace(config.Endpoint) {
+		publicCore, publicErr := minio.NewCore(config.PublicEndpoint, options)
+		if publicErr != nil {
+			return nil, fmt.Errorf("create MinIO presign client: %w", publicErr)
+		}
+		presignClient = publicCore.Client
+	}
+	return &MinIOStore{client: core.Client, presignClient: presignClient, core: core, bucket: config.Bucket}, nil
 }
 
 func (s *MinIOStore) Put(ctx context.Context, key string, reader io.Reader, size int64, contentType string) (ObjectInfo, error) {
@@ -130,7 +138,7 @@ func (s *MinIOStore) InitiateMultipart(ctx context.Context, key, contentType str
 }
 
 func (s *MinIOStore) PresignPart(ctx context.Context, key, uploadID string, partNumber int, expires time.Duration) (string, error) {
-	if s == nil || s.client == nil {
+	if s == nil || s.presignClient == nil {
 		return "", fmt.Errorf("MinIO store is not configured")
 	}
 	if partNumber < 1 || expires <= 0 || expires > 7*24*time.Hour {
@@ -142,7 +150,7 @@ func (s *MinIOStore) PresignPart(ctx context.Context, key, uploadID string, part
 		"partNumber": {strconv.Itoa(partNumber)},
 		"uploadId":   {uploadID},
 	}
-	presigned, err := s.client.Presign(operationCtx, http.MethodPut, s.bucket, key, expires, requestParams)
+	presigned, err := s.presignClient.Presign(operationCtx, http.MethodPut, s.bucket, key, expires, requestParams)
 	if err != nil {
 		return "", fmt.Errorf("presign multipart part %d: %w", partNumber, err)
 	}

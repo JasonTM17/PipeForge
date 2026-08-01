@@ -47,6 +47,7 @@ type Config struct {
 	AccessTokenTTL        time.Duration
 	RefreshTokenTTL       time.Duration
 	MinIOEndpoint         string
+	MinIOPublicEndpoint   string
 	MinIOAccessKey        string
 	MinIOSecretKey        string
 	MinIOSecure           bool
@@ -75,10 +76,12 @@ func Load(getenv func(string) string) (Config, error) {
 	minioAccessKey := getenv("MINIO_ACCESS_KEY")
 	minioSecretKey := getenv("MINIO_SECRET_KEY")
 	minioEndpoint := getenv("MINIO_ENDPOINT")
+	minioPublicEndpoint := getenv("MINIO_PUBLIC_ENDPOINT")
 	if environment == "development" {
 		minioAccessKey = valueOrDefault(minioAccessKey, defaultDevelopmentMinIOKey)
 		minioSecretKey = valueOrDefault(minioSecretKey, defaultDevelopmentMinIOSecret)
 		minioEndpoint = valueOrDefault(minioEndpoint, "localhost:59010")
+		minioPublicEndpoint = valueOrDefault(minioPublicEndpoint, "localhost:59010")
 	}
 	cfg := Config{
 		Environment:           environment,
@@ -94,6 +97,7 @@ func Load(getenv func(string) string) (Config, error) {
 		AccessTokenTTL:        defaultAccessTokenTTL,
 		RefreshTokenTTL:       defaultRefreshTokenTTL,
 		MinIOEndpoint:         minioEndpoint,
+		MinIOPublicEndpoint:   minioPublicEndpoint,
 		MinIOAccessKey:        minioAccessKey,
 		MinIOSecretKey:        minioSecretKey,
 		DatasetBucket:         valueOrDefault(getenv("MINIO_DATASET_BUCKET"), defaultDatasetBucket),
@@ -212,6 +216,9 @@ func (c Config) validate() error {
 	}
 	if strings.TrimSpace(c.MinIOEndpoint) == "" {
 		return errors.New("MINIO_ENDPOINT must be set outside development")
+	}
+	if c.Environment != "development" && strings.TrimSpace(c.MinIOPublicEndpoint) == "" {
+		return errors.New("MINIO_PUBLIC_ENDPOINT must be set outside development")
 	}
 	if strings.TrimSpace(c.MinIOAccessKey) == "" || strings.TrimSpace(c.MinIOSecretKey) == "" || strings.TrimSpace(c.DatasetBucket) == "" {
 		return errors.New("MinIO credentials and dataset bucket must not be empty")

@@ -47,11 +47,9 @@ func run() error {
 		return err
 	}
 	objectStore, err := storage.NewMinIO(storage.MinIOConfig{
-		Endpoint:  cfg.MinIOEndpoint,
-		AccessKey: cfg.MinIOAccessKey,
-		SecretKey: cfg.MinIOSecretKey,
-		Secure:    cfg.MinIOSecure,
-		Bucket:    cfg.DatasetBucket,
+		Endpoint: cfg.MinIOEndpoint, PublicEndpoint: cfg.MinIOPublicEndpoint,
+		AccessKey: cfg.MinIOAccessKey, SecretKey: cfg.MinIOSecretKey,
+		Secure: cfg.MinIOSecure, Bucket: cfg.DatasetBucket,
 	})
 	if err != nil {
 		return err
