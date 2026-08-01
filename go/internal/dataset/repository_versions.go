@@ -63,6 +63,17 @@ RETURNING id, dataset_id, version_number, state, original_filename, content_type
 	return version, nil
 }
 
+func (r *Repository) FindVersion(ctx context.Context, datasetID, versionID uuid.UUID) (DatasetVersion, error) {
+	version, err := scanVersion(r.pool.QueryRow(ctx, versionSelect+`WHERE v.dataset_id = $1 AND v.id = $2`, datasetID, versionID), false)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return DatasetVersion{}, ErrVersionNotFound
+	}
+	if err != nil {
+		return DatasetVersion{}, err
+	}
+	return version, nil
+}
+
 func (r *Repository) FinalizeVersion(ctx context.Context, datasetID, versionID, actorID uuid.UUID, size int64, checksum string) (DatasetVersion, error) {
 	tx, err := r.pool.Begin(ctx)
 	if err != nil {
@@ -75,6 +86,24 @@ func (r *Repository) FinalizeVersion(ctx context.Context, datasetID, versionID, 
 			return DatasetVersion{}, ErrVersionNotFound
 		}
 		return DatasetVersion{}, fmt.Errorf("lock version for finalization: %w", err)
+	}
+	if state == "AVAILABLE" {
+		var existingSize int64
+		var existingChecksum string
+		if err := tx.QueryRow(ctx, `SELECT size_bytes, checksum_sha256 FROM dataset_versions WHERE id = $1`, versionID).Scan(&existingSize, &existingChecksum); err != nil {
+			return DatasetVersion{}, fmt.Errorf("read finalized version metadata: %w", err)
+		}
+		if existingSize != size || existingChecksum != checksum {
+			return DatasetVersion{}, ErrVersionState
+		}
+		version, err := scanVersion(tx.QueryRow(ctx, versionSelect+`WHERE v.id = $1`, versionID), false)
+		if err != nil {
+			return DatasetVersion{}, err
+		}
+		if err := tx.Commit(ctx); err != nil {
+			return DatasetVersion{}, fmt.Errorf("commit idempotent version finalization: %w", err)
+		}
+		return version, nil
 	}
 	if state != "UPLOADING" {
 		return DatasetVersion{}, ErrVersionState
@@ -135,6 +164,58 @@ func (r *Repository) AbortVersion(ctx context.Context, datasetID, versionID, act
 		return fmt.Errorf("commit version abort: %w", err)
 	}
 	return nil
+}
+
+func (r *Repository) FailVersion(ctx context.Context, datasetID, versionID, actorID uuid.UUID, reason string) error {
+	tx, err := r.pool.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("begin version failure: %w", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	var state string
+	if err := tx.QueryRow(ctx, `SELECT state FROM dataset_versions WHERE id = $1 AND dataset_id = $2 FOR UPDATE`, versionID, datasetID).Scan(&state); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return ErrVersionNotFound
+		}
+		return fmt.Errorf("lock version for failure: %w", err)
+	}
+	if state == "FAILED" {
+		return nil
+	}
+	if state != "UPLOADING" {
+		return ErrVersionState
+	}
+	if _, err := tx.Exec(ctx, `UPDATE dataset_versions SET state = 'FAILED' WHERE id = $1`, versionID); err != nil {
+		return fmt.Errorf("mark dataset version failed: %w", err)
+	}
+	var nextDatasetState string
+	if err := tx.QueryRow(ctx, `SELECT CASE WHEN EXISTS (SELECT 1 FROM dataset_versions WHERE dataset_id = $1 AND state = 'AVAILABLE') THEN 'AVAILABLE' ELSE 'REGISTERED' END`, datasetID).Scan(&nextDatasetState); err != nil {
+		return fmt.Errorf("restore dataset state after version failure: %w", err)
+	}
+	if _, err := tx.Exec(ctx, `UPDATE datasets SET state = $1, updated_at = NOW() WHERE id = $2`, nextDatasetState, datasetID); err != nil {
+		return fmt.Errorf("update dataset after version failure: %w", err)
+	}
+	var actor any
+	if actorID != uuid.Nil {
+		actor = actorID
+	}
+	if _, err := tx.Exec(ctx, `INSERT INTO dataset_state_history (dataset_id, from_state, to_state, reason, actor_user_id) VALUES ($1, 'UPLOADING', 'FAILED', $2, $3)`, datasetID, truncateStateReason(reason), actor); err != nil {
+		return fmt.Errorf("record version failure history: %w", err)
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return fmt.Errorf("commit version failure: %w", err)
+	}
+	return nil
+}
+
+func truncateStateReason(reason string) string {
+	if len(reason) > 200 {
+		return reason[:200]
+	}
+	if reason == "" {
+		return "version_upload_failed"
+	}
+	return reason
 }
 
 const versionSelect = `

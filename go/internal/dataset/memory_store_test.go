@@ -120,6 +120,12 @@ func (s *memoryDatasetStore) FinalizeVersion(_ context.Context, datasetID, versi
 	if !ok || version.DatasetID != datasetID {
 		return DatasetVersion{}, ErrVersionNotFound
 	}
+	if version.State == "AVAILABLE" {
+		if version.SizeBytes == nil || *version.SizeBytes != size || version.ChecksumSHA256 == nil || *version.ChecksumSHA256 != checksum {
+			return DatasetVersion{}, ErrVersionState
+		}
+		return version, nil
+	}
 	if version.State != "UPLOADING" {
 		return DatasetVersion{}, ErrVersionState
 	}
@@ -134,6 +140,38 @@ func (s *memoryDatasetStore) FinalizeVersion(_ context.Context, datasetID, versi
 	dataset.UpdatedAt = now
 	s.datasets[datasetID] = dataset
 	return version, nil
+}
+
+func (s *memoryDatasetStore) FindVersion(_ context.Context, datasetID, versionID uuid.UUID) (DatasetVersion, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	version, ok := s.versions[versionID]
+	if !ok || version.DatasetID != datasetID {
+		return DatasetVersion{}, ErrVersionNotFound
+	}
+	return version, nil
+}
+
+func (s *memoryDatasetStore) FailVersion(_ context.Context, datasetID, versionID, _ uuid.UUID, _ string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	version, ok := s.versions[versionID]
+	if !ok || version.DatasetID != datasetID {
+		return ErrVersionNotFound
+	}
+	if version.State == "FAILED" {
+		return nil
+	}
+	if version.State != "UPLOADING" {
+		return ErrVersionState
+	}
+	version.State = "FAILED"
+	s.versions[versionID] = version
+	dataset := s.datasets[datasetID]
+	dataset.State = "REGISTERED"
+	dataset.UpdatedAt = time.Now().UTC()
+	s.datasets[datasetID] = dataset
+	return nil
 }
 
 func (s *memoryDatasetStore) AbortVersion(_ context.Context, datasetID, versionID, _ uuid.UUID) error {

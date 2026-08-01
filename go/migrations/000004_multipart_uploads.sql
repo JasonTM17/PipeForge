@@ -28,7 +28,7 @@ CREATE INDEX upload_sessions_owner_created_idx ON upload_sessions (owner_user_id
 CREATE INDEX upload_sessions_expiry_idx ON upload_sessions (expires_at, state);
 CREATE UNIQUE INDEX upload_sessions_active_idempotency_idx
     ON upload_sessions (owner_user_id, dataset_id, idempotency_key)
-    WHERE idempotency_key IS NOT NULL AND state IN ('INITIATED', 'COMPLETING', 'ABORTING');
+    WHERE idempotency_key IS NOT NULL AND state IN ('INITIATED', 'COMPLETING', 'ABORTING', 'COMPLETED');
 
 CREATE TABLE upload_parts (
     session_id UUID NOT NULL REFERENCES upload_sessions(id) ON DELETE CASCADE,

@@ -73,7 +73,9 @@ type Store interface {
 	ListDatasets(context.Context, *uuid.UUID, int, int, string, string) (DatasetPage, error)
 	DeleteDataset(context.Context, uuid.UUID, uuid.UUID) error
 	ReserveVersion(context.Context, VersionReservation) (DatasetVersion, error)
+	FindVersion(context.Context, uuid.UUID, uuid.UUID) (DatasetVersion, error)
 	FinalizeVersion(context.Context, uuid.UUID, uuid.UUID, uuid.UUID, int64, string) (DatasetVersion, error)
+	FailVersion(context.Context, uuid.UUID, uuid.UUID, uuid.UUID, string) error
 	AbortVersion(context.Context, uuid.UUID, uuid.UUID, uuid.UUID) error
 	ListVersions(context.Context, uuid.UUID) ([]DatasetVersion, error)
 }

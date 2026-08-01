@@ -220,6 +220,12 @@ func (s *httpDatasetStore) FinalizeVersion(_ context.Context, datasetID, version
 	if !ok || version.DatasetID != datasetID {
 		return dataset.DatasetVersion{}, dataset.ErrVersionNotFound
 	}
+	if version.State == "AVAILABLE" {
+		if version.SizeBytes == nil || *version.SizeBytes != size || version.ChecksumSHA256 == nil || *version.ChecksumSHA256 != checksum {
+			return dataset.DatasetVersion{}, dataset.ErrVersionState
+		}
+		return version, nil
+	}
 	now := time.Now().UTC()
 	version.State = "AVAILABLE"
 	version.SizeBytes = &size
@@ -230,6 +236,27 @@ func (s *httpDatasetStore) FinalizeVersion(_ context.Context, datasetID, version
 	item.State = "AVAILABLE"
 	s.datasets[datasetID] = item
 	return version, nil
+}
+
+func (s *httpDatasetStore) FindVersion(_ context.Context, datasetID, versionID uuid.UUID) (dataset.DatasetVersion, error) {
+	version, ok := s.versions[versionID]
+	if !ok || version.DatasetID != datasetID {
+		return dataset.DatasetVersion{}, dataset.ErrVersionNotFound
+	}
+	return version, nil
+}
+
+func (s *httpDatasetStore) FailVersion(_ context.Context, datasetID, versionID, _ uuid.UUID, _ string) error {
+	version, ok := s.versions[versionID]
+	if !ok || version.DatasetID != datasetID {
+		return dataset.ErrVersionNotFound
+	}
+	version.State = "FAILED"
+	s.versions[versionID] = version
+	item := s.datasets[datasetID]
+	item.State = "REGISTERED"
+	s.datasets[datasetID] = item
+	return nil
 }
 
 func (s *httpDatasetStore) AbortVersion(_ context.Context, _, versionID, _ uuid.UUID) error {
