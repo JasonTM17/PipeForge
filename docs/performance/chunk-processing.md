@@ -31,3 +31,11 @@ The profile serializer uses stable key ordering and rejects non-finite JSON
 numbers. `upload_profile` writes only to
 `reports/{jobId}/attempt-{attemptNumber}/profile.json`; Go owns acceptance and
 canonical promotion after lease/result validation.
+
+Anomaly detection uses a deterministic bounded numeric retention strategy. It
+computes IQR, population Z-score, or modified Z-score over the retained sample,
+never serializes raw values, and emits only capped row-number/hash references.
+Insufficient samples and zero-variance columns produce `SKIPPED` warnings rather
+than a false anomaly storm. A bounded-sample warning is included when the input
+exceeds the retention limit; the future result consumer owns public artifact
+access.

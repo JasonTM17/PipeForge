@@ -32,7 +32,7 @@ There is no arbitrary status-update endpoint. Every transition is checked agains
 - `POST /api/v1/jobs/{jobID}/cancel` requests cancellation and publishes `processing.job.cancel-requested` through the outbox.
 - `POST /api/v1/jobs/{jobID}/retry` re-queues an eligible failed/dead-lettered job and publishes a fresh request command.
 
-Operation types are allowlisted: `PROFILE_DATASET`, `CHECK_MISSING_VALUES`, `CHECK_DUPLICATES`, and `DETECT_OUTLIERS`. Column identifiers are restricted to safe identifier syntax, operation count is capped at 32, and request bodies are capped at 64 KiB. Fingerprints use canonical JSON, so object-key ordering cannot bypass idempotency conflict detection.
+Operation types are allowlisted: `PROFILE_DATASET`, `CHECK_MISSING_VALUES`, `CHECK_DUPLICATES`, `VALIDATE_QUALITY`, and `DETECT_OUTLIERS`. Column identifiers are restricted to safe identifier syntax, operation count is capped at 32, and request bodies are capped at 64 KiB. Fingerprints use canonical JSON, so object-key ordering cannot bypass idempotency conflict detection. Outlier detection supports IQR, Z-score, and modified Z-score with explicit finite-number, null-policy, sample-size, and reference bounds.
 
 ## Transaction and delivery boundary
 
