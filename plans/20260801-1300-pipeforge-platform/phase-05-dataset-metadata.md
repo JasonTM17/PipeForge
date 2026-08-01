@@ -1,10 +1,13 @@
 ---
 phase: 5
-title: "Dataset metadata"
-status: pending
+title: Dataset metadata
+status: in-progress
 priority: P1
-effort: "4d"
-dependencies: [2, 3, 4]
+effort: 4d
+dependencies:
+  - 2
+  - 3
+  - 4
 ---
 
 # Phase 5: Dataset metadata
