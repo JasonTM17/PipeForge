@@ -83,6 +83,52 @@ services:
     entrypoint: ["/bin/sh", "/opt/pipeforge/init.sh"]
     restart: "no"
 
+  api:
+    build:
+      context: .
+      dockerfile: infrastructure/docker/go-api.Dockerfile
+    environment:
+      PIPEFORGE_ENV: ${PIPEFORGE_ENV:-development}
+      PIPEFORGE_LOG_LEVEL: ${PIPEFORGE_LOG_LEVEL:-info}
+      PIPEFORGE_HTTP_ADDR: ":8080"
+      PIPEFORGE_DATABASE_MAX_CONNS: ${PIPEFORGE_DATABASE_MAX_CONNS:-10}
+      PIPEFORGE_SHUTDOWN_TIMEOUT: ${PIPEFORGE_SHUTDOWN_TIMEOUT:-10s}
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+      POSTGRES_DATABASE: ${POSTGRES_DATABASE:?POSTGRES_DATABASE is required}
+      POSTGRES_USER: ${POSTGRES_USER:?POSTGRES_USER is required}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
+    ports:
+      - "${PIPEFORGE_API_PORT:-58080}:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "-", "http://localhost:8080/health/live"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+      start_period: 10s
+    restart: unless-stopped
+
+  migrate:
+    build:
+      context: .
+      dockerfile: infrastructure/docker/go-api.Dockerfile
+    profiles: [tools]
+    entrypoint: ["/usr/local/bin/pipeforge-migrate"]
+    environment:
+      PIPEFORGE_ENV: ${PIPEFORGE_ENV:-development}
+      PIPEFORGE_LOG_LEVEL: ${PIPEFORGE_LOG_LEVEL:-info}
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+      POSTGRES_DATABASE: ${POSTGRES_DATABASE:?POSTGRES_DATABASE is required}
+      POSTGRES_USER: ${POSTGRES_USER:?POSTGRES_USER is required}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
+    depends_on:
+      postgres:
+        condition: service_healthy
+
   prometheus:
     image: prom/prometheus:v2.53.1
     profiles: [monitoring]
