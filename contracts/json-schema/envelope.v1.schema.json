@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://pipeforge.dev/contracts/envelope.v1.schema.json",
+  "title": "PipeForge message envelope v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["messageId", "messageType", "schemaVersion", "occurredAt", "traceId", "correlationId", "causationId", "payload"],
+  "properties": {
+    "messageId": { "type": "string", "format": "uuid" },
+    "messageType": { "type": "string", "pattern": "^[a-z][a-z0-9]*(\\.[a-z0-9-]+)+$" },
+    "schemaVersion": { "type": "integer", "const": 1 },
+    "occurredAt": { "type": "string", "format": "date-time" },
+    "traceId": { "type": "string", "minLength": 1, "maxLength": 128 },
+    "correlationId": { "type": "string", "minLength": 1, "maxLength": 128 },
+    "causationId": { "type": "string", "minLength": 1, "maxLength": 128 },
+    "payload": { "type": "object", "maxProperties": 64 }
+  }
+}

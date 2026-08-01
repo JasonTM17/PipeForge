@@ -1,0 +1,29 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://pipeforge.dev/contracts/processing.artifact.created.v1.schema.json",
+  "title": "Processing artifact created v1",
+  "allOf": [
+    { "$ref": "envelope.v1.schema.json" },
+    {
+      "properties": {
+        "messageType": { "const": "processing.artifact.created" },
+        "payload": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["jobId", "attemptId", "leaseId", "artifactId", "kind", "objectKey", "sizeBytes", "contentType", "checksumSha256"],
+          "properties": {
+            "jobId": { "type": "string", "format": "uuid" },
+            "attemptId": { "type": "string", "format": "uuid" },
+            "leaseId": { "type": "string", "format": "uuid" },
+            "artifactId": { "type": "string", "format": "uuid" },
+            "kind": { "type": "string", "minLength": 1, "maxLength": 64 },
+            "objectKey": { "type": "string", "pattern": "^[a-z0-9/_-]+\\.[a-z0-9]+$", "maxLength": 512 },
+            "sizeBytes": { "type": "integer", "minimum": 0 },
+            "contentType": { "type": "string", "minLength": 1, "maxLength": 128 },
+            "checksumSha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" }
+          }
+        }
+      }
+    }
+  ]
+}

@@ -1,0 +1,29 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://pipeforge.dev/contracts/processing.job.progressed.v1.schema.json",
+  "title": "Processing job progressed v1",
+  "allOf": [
+    { "$ref": "envelope.v1.schema.json" },
+    {
+      "properties": {
+        "messageType": { "const": "processing.job.progressed" },
+        "payload": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["jobId", "attemptId", "leaseId", "stage", "processedRows", "progressPercent", "updatedAt"],
+          "properties": {
+            "jobId": { "type": "string", "format": "uuid" },
+            "attemptId": { "type": "string", "format": "uuid" },
+            "leaseId": { "type": "string", "format": "uuid" },
+            "stage": { "type": "string", "minLength": 1, "maxLength": 64 },
+            "processedRows": { "type": "integer", "minimum": 0 },
+            "estimatedTotalRows": { "type": ["integer", "null"], "minimum": 0 },
+            "progressPercent": { "type": "number", "minimum": 0, "maximum": 100 },
+            "throughput": { "type": "number", "minimum": 0 },
+            "updatedAt": { "type": "string", "format": "date-time" }
+          }
+        }
+      }
+    }
+  ]
+}

@@ -1,0 +1,20 @@
+{
+  "messageId": "99999999-9999-4999-8999-999999999999",
+  "messageType": "processing.job.progressed",
+  "schemaVersion": 1,
+  "occurredAt": "2026-08-01T12:02:00Z",
+  "traceId": "trace-01J4EXAMPLE",
+  "correlationId": "job-01J4EXAMPLE",
+  "causationId": "worker-01J4EXAMPLE",
+  "payload": {
+    "jobId": "22222222-2222-4222-8222-222222222222",
+    "attemptId": "66666666-6666-4666-8666-666666666666",
+    "leaseId": "77777777-7777-4777-8777-777777777777",
+    "stage": "profile",
+    "processedRows": 1250,
+    "estimatedTotalRows": 5000,
+    "progressPercent": 25,
+    "throughput": 625,
+    "updatedAt": "2026-08-01T12:02:00Z"
+  }
+}
