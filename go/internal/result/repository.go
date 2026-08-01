@@ -6,21 +6,33 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/JasonTM17/PipeForge/go/internal/job"
+	"github.com/JasonTM17/PipeForge/go/internal/outbox"
 	"github.com/JasonTM17/PipeForge/go/internal/queue"
+	"github.com/JasonTM17/PipeForge/go/internal/retry"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 type Repository struct {
-	pool *pgxpool.Pool
+	pool        *pgxpool.Pool
+	outbox      outbox.Enqueuer
+	retryPolicy retry.Policy
 }
 
-func NewRepository(pool *pgxpool.Pool) (*Repository, error) {
+func NewRepository(pool *pgxpool.Pool, writers ...outbox.Enqueuer) (*Repository, error) {
 	if pool == nil {
 		return nil, errors.New("result repository requires a database")
 	}
-	return &Repository{pool: pool}, nil
+	if len(writers) > 1 {
+		return nil, errors.New("result repository accepts at most one outbox writer")
+	}
+	var writer outbox.Enqueuer
+	if len(writers) == 1 {
+		writer = writers[0]
+	}
+	return &Repository{pool: pool, outbox: writer, retryPolicy: retry.DefaultPolicy()}, nil
 }
 
 func (r *Repository) Process(ctx context.Context, envelope queue.Envelope) (Outcome, error) {
@@ -72,32 +84,40 @@ ON CONFLICT (message_id) DO NOTHING`, envelope.MessageID, envelope.MessageType, 
 }
 
 type attemptContext struct {
-	OwnerUserID   uuid.UUID
-	JobState      string
-	JobID         uuid.UUID
-	AttemptID     uuid.UUID
-	AttemptNumber int
-	AttemptState  string
-	LeaseID       *uuid.UUID
-	WorkerID      *uuid.UUID
+	OwnerUserID      uuid.UUID
+	JobState         string
+	JobID            uuid.UUID
+	DatasetVersionID uuid.UUID
+	Operations       []job.Operation
+	MaxAttempts      int
+	AttemptID        uuid.UUID
+	AttemptNumber    int
+	AttemptState     string
+	LeaseID          *uuid.UUID
+	WorkerID         *uuid.UUID
 }
 
 func lockAttempt(ctx context.Context, tx pgx.Tx, jobID, attemptID uuid.UUID) (attemptContext, error) {
 	var item attemptContext
+	var operations []byte
 	err := tx.QueryRow(ctx, `
-SELECT j.owner_user_id, j.state, j.id, a.id, a.attempt_number, a.state, a.lease_id, a.worker_id
+SELECT j.owner_user_id, j.state, j.id, j.dataset_version_id, j.operations, j.max_attempts,
+       a.id, a.attempt_number, a.state, a.lease_id, a.worker_id
 FROM processing_jobs j
 JOIN job_attempts a ON a.job_id = j.id
 WHERE j.id = $1 AND a.id = $2
 FOR UPDATE`, jobID, attemptID).Scan(
-		&item.OwnerUserID, &item.JobState, &item.JobID, &item.AttemptID,
-		&item.AttemptNumber, &item.AttemptState, &item.LeaseID, &item.WorkerID,
+		&item.OwnerUserID, &item.JobState, &item.JobID, &item.DatasetVersionID, &operations, &item.MaxAttempts,
+		&item.AttemptID, &item.AttemptNumber, &item.AttemptState, &item.LeaseID, &item.WorkerID,
 	)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return attemptContext{}, nil
 	}
 	if err != nil {
 		return attemptContext{}, fmt.Errorf("lock result attempt: %w", err)
+	}
+	if err := json.Unmarshal(operations, &item.Operations); err != nil {
+		return attemptContext{}, fmt.Errorf("decode result job operations: %w", err)
 	}
 	return item, nil
 }

@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/JasonTM17/PipeForge/go/internal/job"
+	"github.com/JasonTM17/PipeForge/go/internal/outbox"
 	"github.com/JasonTM17/PipeForge/go/internal/queue"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -139,24 +140,89 @@ func (r *Repository) applyFailed(ctx context.Context, tx pgx.Tx, event FailedEve
 	if item.JobState != job.StateRunning || item.AttemptState != job.AttemptRunning {
 		return OutcomeIgnored, "result_before_start_or_terminal_attempt", nil
 	}
-	state := job.StateFailedPermanent
-	if event.Error.Retryable {
-		state = job.StateFailedRetryable
-	}
 	now := time.Now().UTC()
-	if _, err := tx.Exec(ctx, `UPDATE processing_jobs SET state = $2, finished_at = $3, updated_at = $3, last_error_code = $4, last_error_message = $5 WHERE id = $1`, event.JobID, state, now, truncateText(event.Error.Code, 128), truncateText(event.Error.Message, 500)); err != nil {
-		return "", "", fmt.Errorf("mark job failed: %w", err)
-	}
 	if _, err := tx.Exec(ctx, `UPDATE job_attempts SET state = $2, finished_at = $3, error_code = $4, error_message = $5, retryable = $6 WHERE id = $1`, event.AttemptID, job.AttemptFailed, now, truncateText(event.Error.Code, 128), truncateText(event.Error.Message, 500), event.Error.Retryable); err != nil {
 		return "", "", fmt.Errorf("mark attempt failed: %w", err)
-	}
-	if err := recordHistory(ctx, tx, event.JobID, job.StateRunning, state, "worker_failed"); err != nil {
-		return "", "", err
 	}
 	if err := insertResultProjection(ctx, tx, event.JobID, event.AttemptID, "FAILED", nil, &event.Error); err != nil {
 		return "", "", err
 	}
-	return OutcomeApplied, "failed", nil
+
+	if event.Error.Retryable && item.AttemptNumber < item.MaxAttempts {
+		if r.outbox == nil {
+			return "", "", fmt.Errorf("retryable result requires an outbox writer")
+		}
+		nextAttempt := item.AttemptNumber + 1
+		policy := r.retryPolicy
+		if policy.MaxAttempts < item.MaxAttempts {
+			policy.MaxAttempts = item.MaxAttempts
+		}
+		delay, err := policy.Delay(nextAttempt, nil)
+		if err != nil {
+			return "", "", fmt.Errorf("calculate result retry delay: %w", err)
+		}
+		nextAt := now.Add(delay)
+		nextAttemptID := uuid.New()
+		if _, err := tx.Exec(ctx, `INSERT INTO job_attempts (id, job_id, attempt_number, state, created_at) VALUES ($1, $2, $3, $4, $5)`, nextAttemptID, event.JobID, nextAttempt, job.AttemptCreated, now); err != nil {
+			return "", "", fmt.Errorf("create result retry attempt: %w", err)
+		}
+		if _, err := tx.Exec(ctx, `
+UPDATE processing_jobs
+SET state = $2, next_attempt_at = $3, finished_at = NULL, updated_at = $4,
+    last_error_code = $5, last_error_message = $6
+WHERE id = $1`, event.JobID, job.StateQueued, nextAt, now, truncateText(event.Error.Code, 128), truncateText(event.Error.Message, 500)); err != nil {
+			return "", "", fmt.Errorf("queue result retry: %w", err)
+		}
+		if _, err := tx.Exec(ctx, `UPDATE job_quota_counters SET active_count = GREATEST(active_count - 1, 0), queued_count = queued_count + 1, updated_at = $2 WHERE owner_user_id = $1`, item.OwnerUserID, now); err != nil {
+			return "", "", fmt.Errorf("update result retry quota: %w", err)
+		}
+		if err := recordHistory(ctx, tx, event.JobID, job.StateRunning, job.StateQueued, "worker_failed_retry_scheduled"); err != nil {
+			return "", "", err
+		}
+		if err := enqueueResultRetry(ctx, tx, r.outbox, item, nextAt); err != nil {
+			return "", "", err
+		}
+		return OutcomeApplied, "retry_scheduled", nil
+	}
+
+	state := job.StateFailedPermanent
+	reason := "worker_failed"
+	if event.Error.Retryable {
+		state = job.StateDeadLettered
+		reason = "retry_exhausted_dead_lettered"
+		if _, err := tx.Exec(ctx, `
+INSERT INTO job_dead_letters (id, job_id, attempt_id, lease_id, worker_id, attempt_number, error_code, error_message, retryable, diagnostic_ref)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, TRUE, $9)
+ON CONFLICT (job_id, attempt_id) DO NOTHING`, uuid.New(), event.JobID, event.AttemptID, event.LeaseID, event.WorkerID, item.AttemptNumber, truncateText(event.Error.Code, 128), truncateText(event.Error.Message, 500), event.Error.DiagnosticRef); err != nil {
+			return "", "", fmt.Errorf("persist exhausted result dead-letter: %w", err)
+		}
+	}
+	if _, err := tx.Exec(ctx, `UPDATE processing_jobs SET state = $2, next_attempt_at = NULL, finished_at = $3, updated_at = $3, last_error_code = $4, last_error_message = $5 WHERE id = $1`, event.JobID, state, now, truncateText(event.Error.Code, 128), truncateText(event.Error.Message, 500)); err != nil {
+		return "", "", fmt.Errorf("mark job failed: %w", err)
+	}
+	if _, err := tx.Exec(ctx, `UPDATE job_quota_counters SET active_count = GREATEST(active_count - 1, 0), updated_at = $2 WHERE owner_user_id = $1`, item.OwnerUserID, now); err != nil {
+		return "", "", fmt.Errorf("update failed job quota: %w", err)
+	}
+	if err := recordHistory(ctx, tx, event.JobID, job.StateRunning, state, reason); err != nil {
+		return "", "", err
+	}
+	return OutcomeApplied, reason, nil
+}
+
+func enqueueResultRetry(ctx context.Context, tx pgx.Tx, writer outbox.Enqueuer, item attemptContext, availableAt time.Time) error {
+	traceID := item.JobID.String()
+	envelope, err := queue.NewEnvelope(queue.MessageJobRequested, traceID, traceID, traceID, struct {
+		JobID            uuid.UUID       `json:"jobId"`
+		DatasetVersionID uuid.UUID       `json:"datasetVersionId"`
+		Operations       []job.Operation `json:"operations"`
+	}{JobID: item.JobID, DatasetVersionID: item.DatasetVersionID, Operations: item.Operations})
+	if err != nil {
+		return fmt.Errorf("create result retry command: %w", err)
+	}
+	if err := writer.Enqueue(ctx, tx, outbox.Message{ID: envelope.MessageID, Envelope: envelope, Exchange: queue.CommandsExchange, RoutingKey: envelope.MessageType, AvailableAt: availableAt}); err != nil {
+		return fmt.Errorf("enqueue result retry command: %w", err)
+	}
+	return nil
 }
 
 func (r *Repository) applyArtifact(ctx context.Context, tx pgx.Tx, event ArtifactCreatedEvent) (string, string, error) {

@@ -91,7 +91,7 @@ func run() error {
 	if err != nil {
 		return err
 	}
-	resultRepository, err := result.NewRepository(pool)
+	resultRepository, err := result.NewRepository(pool, outboxRepository)
 	if err != nil {
 		return err
 	}

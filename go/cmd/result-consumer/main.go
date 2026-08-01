@@ -9,6 +9,7 @@ import (
 	"os/signal"
 	"syscall"
 
+	"github.com/JasonTM17/PipeForge/go/internal/outbox"
 	"github.com/JasonTM17/PipeForge/go/internal/platform/config"
 	"github.com/JasonTM17/PipeForge/go/internal/platform/database"
 	"github.com/JasonTM17/PipeForge/go/internal/queue"
@@ -39,8 +40,12 @@ func run() error {
 		return err
 	}
 	defer pool.Close()
+	outboxRepository, err := outbox.NewRepository(pool)
+	if err != nil {
+		return err
+	}
 
-	resultRepository, err := result.NewRepository(pool)
+	resultRepository, err := result.NewRepository(pool, outboxRepository)
 	if err != nil {
 		return err
 	}
