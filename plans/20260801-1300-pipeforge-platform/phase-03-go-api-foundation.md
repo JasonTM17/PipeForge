@@ -1,7 +1,7 @@
 ---
 phase: 3
 title: Go API foundation
-status: in-progress
+status: completed
 priority: P1
 effort: 3d
 dependencies:
