@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"io"
 	"strings"
-	"time"
 
 	"github.com/JasonTM17/PipeForge/go/internal/auth"
 	"github.com/JasonTM17/PipeForge/go/internal/authz"
@@ -29,7 +28,6 @@ type Service struct {
 	Store          Store
 	Objects        storage.ObjectStore
 	MaxUploadBytes int64
-	Now            func() time.Time
 }
 
 type UploadRequest struct {
@@ -44,7 +42,7 @@ func NewService(store Store, objects storage.ObjectStore, maxUploadBytes int64) 
 	if store == nil || objects == nil || maxUploadBytes <= 0 {
 		return nil, errors.New("dataset service is not configured")
 	}
-	return &Service{Store: store, Objects: objects, MaxUploadBytes: maxUploadBytes, Now: time.Now}, nil
+	return &Service{Store: store, Objects: objects, MaxUploadBytes: maxUploadBytes}, nil
 }
 
 func (s *Service) Create(ctx context.Context, principal auth.Principal, name, description string) (Dataset, error) {
@@ -221,13 +219,6 @@ func (s *Service) requireConfigured() error {
 		return errors.New("dataset service is not configured")
 	}
 	return nil
-}
-
-func (s *Service) now() time.Time {
-	if s.Now == nil {
-		return time.Now()
-	}
-	return s.Now()
 }
 
 func ObjectKey(datasetID, versionID uuid.UUID) string {

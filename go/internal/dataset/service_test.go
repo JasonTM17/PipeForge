@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"errors"
+	"io"
 	"testing"
 
 	"github.com/JasonTM17/PipeForge/go/internal/auth"
@@ -61,6 +62,32 @@ func TestUploadVersionRejectsOversizeAndCleansUp(t *testing.T) {
 	}
 	if len(objects.objects) != 0 || len(objects.deleted) != 1 || len(store.versions) != 0 || len(store.aborted) != 1 {
 		t.Fatalf("oversize cleanup incomplete: objects=%v deleted=%v versions=%v aborted=%v", objects.objects, objects.deleted, store.versions, store.aborted)
+	}
+}
+
+func TestUploadVersionBoundsLargeStreamBeforeCleanup(t *testing.T) {
+	ownerID := uuid.New()
+	store, dataset := newMemoryDatasetStore(ownerID)
+	objects := newMemoryObjectStore()
+	service, err := NewService(store, objects, 128*1024)
+	if err != nil {
+		t.Fatalf("NewService returned error: %v", err)
+	}
+	body := &repeatingReader{remaining: 1024 * 1024, pattern: []byte("1,2\n")}
+	_, err = service.UploadVersion(context.Background(), datasetPrincipal(ownerID), dataset.ID, UploadRequest{
+		Filename:      "large.csv",
+		ContentType:   "text/csv",
+		ContentLength: -1,
+		Body:          body,
+	})
+	if !errors.Is(err, ErrUploadTooLarge) {
+		t.Fatalf("expected oversize error, got %v", err)
+	}
+	if body.ReadBytes > service.MaxUploadBytes+1 {
+		t.Fatalf("stream reader was not bounded: read %d bytes", body.ReadBytes)
+	}
+	if len(objects.objects) != 0 || len(store.versions) != 0 || len(store.aborted) != 1 {
+		t.Fatalf("large stream cleanup incomplete: objects=%v versions=%v aborted=%v", objects.objects, store.versions, store.aborted)
 	}
 }
 
@@ -134,6 +161,30 @@ func datasetPrincipal(userID uuid.UUID) auth.Principal {
 type readTrackingReader struct {
 	Reader *bytes.Reader
 	Reads  int
+}
+
+type repeatingReader struct {
+	remaining int64
+	pattern   []byte
+	offset    int
+	ReadBytes int64
+}
+
+func (r *repeatingReader) Read(buffer []byte) (int, error) {
+	if r.remaining == 0 {
+		return 0, io.EOF
+	}
+	count := len(buffer)
+	if int64(count) > r.remaining {
+		count = int(r.remaining)
+	}
+	for index := 0; index < count; index++ {
+		buffer[index] = r.pattern[r.offset]
+		r.offset = (r.offset + 1) % len(r.pattern)
+	}
+	r.remaining -= int64(count)
+	r.ReadBytes += int64(count)
+	return count, nil
 }
 
 func (r *readTrackingReader) Read(buffer []byte) (int, error) {
