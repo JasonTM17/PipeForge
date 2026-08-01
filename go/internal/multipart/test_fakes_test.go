@@ -98,6 +98,16 @@ func (s *fakeDatasetStore) FindVersion(_ context.Context, datasetID, versionID u
 	return version, nil
 }
 
+func (s *fakeDatasetStore) FindVersionByID(_ context.Context, versionID uuid.UUID) (dataset.DatasetVersion, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	version, ok := s.versions[versionID]
+	if !ok {
+		return dataset.DatasetVersion{}, dataset.ErrVersionNotFound
+	}
+	return version, nil
+}
+
 func (s *fakeDatasetStore) FinalizeVersion(_ context.Context, datasetID, versionID, _ uuid.UUID, size int64, checksum string) (dataset.DatasetVersion, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()

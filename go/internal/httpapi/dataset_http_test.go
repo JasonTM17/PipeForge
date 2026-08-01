@@ -250,6 +250,14 @@ func (s *httpDatasetStore) FindVersion(_ context.Context, datasetID, versionID u
 	return version, nil
 }
 
+func (s *httpDatasetStore) FindVersionByID(_ context.Context, versionID uuid.UUID) (dataset.DatasetVersion, error) {
+	version, ok := s.versions[versionID]
+	if !ok {
+		return dataset.DatasetVersion{}, dataset.ErrVersionNotFound
+	}
+	return version, nil
+}
+
 func (s *httpDatasetStore) FailVersion(_ context.Context, datasetID, versionID, _ uuid.UUID, _ string) error {
 	version, ok := s.versions[versionID]
 	if !ok || version.DatasetID != datasetID {

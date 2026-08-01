@@ -75,6 +75,17 @@ func (r *Repository) FindVersion(ctx context.Context, datasetID, versionID uuid.
 	return version, nil
 }
 
+func (r *Repository) FindVersionByID(ctx context.Context, versionID uuid.UUID) (DatasetVersion, error) {
+	version, err := scanVersion(r.pool.QueryRow(ctx, versionSelect+`WHERE v.id = $1`, versionID), false)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return DatasetVersion{}, ErrVersionNotFound
+	}
+	if err != nil {
+		return DatasetVersion{}, err
+	}
+	return version, nil
+}
+
 func (r *Repository) FinalizeVersion(ctx context.Context, datasetID, versionID, actorID uuid.UUID, size int64, checksum string) (DatasetVersion, error) {
 	return r.finalizeVersion(ctx, datasetID, versionID, actorID, size, checksum, uuid.Nil, uuid.Nil)
 }

@@ -155,6 +155,16 @@ func (s *memoryDatasetStore) FindVersion(_ context.Context, datasetID, versionID
 	return version, nil
 }
 
+func (s *memoryDatasetStore) FindVersionByID(_ context.Context, versionID uuid.UUID) (DatasetVersion, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	version, ok := s.versions[versionID]
+	if !ok {
+		return DatasetVersion{}, ErrVersionNotFound
+	}
+	return version, nil
+}
+
 func (s *memoryDatasetStore) FailVersion(_ context.Context, datasetID, versionID, _ uuid.UUID, _ string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
