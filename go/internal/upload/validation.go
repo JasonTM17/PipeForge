@@ -83,6 +83,10 @@ func ChecksumHex(sum [sha256.Size]byte) string {
 	return hex.EncodeToString(sum[:])
 }
 
+func ChecksumBytes(sum []byte) string {
+	return hex.EncodeToString(sum)
+}
+
 func formatFromExtension(extension string) Format {
 	switch strings.ToLower(extension) {
 	case ".csv":
