@@ -1,10 +1,11 @@
 ---
 phase: 11
-title: "Profiling"
-status: pending
+title: Profiling
+status: completed
 priority: P1
-effort: "4d"
-dependencies: [10]
+effort: 4d
+dependencies:
+  - 10
 ---
 
 # Phase 11: Profiling
@@ -41,11 +42,11 @@ Add deterministic dataset/column profiling, configurable bounded samples and sta
 
 ## Success Criteria
 
-- [ ] Profile output is deterministic for the same input/config in test mode.
-- [ ] Memory/sample limits are enforced and visible as warnings.
-- [ ] Required dataset/column metrics are present or explicitly marked unavailable.
-- [ ] Profile artifact is attempt-scoped and contains no raw sensitive rows by default.
-- [ ] Throughput/duration metrics use monotonic timing and handle zero-row input.
+- [x] Profile output is deterministic for the same input/config in test mode.
+- [x] Memory/sample limits are enforced and visible as warnings.
+- [x] Required dataset/column metrics are present or explicitly marked unavailable.
+- [x] Profile artifact is attempt-scoped and contains no raw sensitive rows by default.
+- [x] Throughput/duration metrics use monotonic timing and handle zero-row input.
 
 ## Validation
 
@@ -70,4 +71,3 @@ Phase 12 evaluates data-quality rules over the same chunk stream.
 ## Unresolved Questions
 
 - None blocking; exact approximate-distinct algorithm can remain a documented future adapter if MVP limits are sufficient.
-
