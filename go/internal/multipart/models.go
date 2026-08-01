@@ -108,6 +108,6 @@ type Store interface {
 	MarkCompleted(context.Context, uuid.UUID, time.Time) error
 	MarkAborted(context.Context, uuid.UUID, time.Time) error
 	MarkFailed(context.Context, uuid.UUID, string) error
-	ClaimExpired(context.Context, time.Time, int) ([]Session, error)
+	ClaimExpired(context.Context, time.Time, time.Time, int) ([]Session, error)
 	MarkExpired(context.Context, uuid.UUID, string, time.Time) error
 }

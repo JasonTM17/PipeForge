@@ -23,11 +23,12 @@ const (
 )
 
 type Config struct {
-	PartSize   int64
-	MaxParts   int
-	MaxBytes   int64
-	SessionTTL time.Duration
-	PartURLTTL time.Duration
+	PartSize        int64
+	MaxParts        int
+	MaxBytes        int64
+	SessionTTL      time.Duration
+	PartURLTTL      time.Duration
+	CompletionGrace time.Duration
 }
 
 type Service struct {
@@ -63,8 +64,8 @@ func (s Config) validate() error {
 	if s.MaxBytes < s.PartSize || s.MaxBytes > s.PartSize*int64(s.MaxParts) {
 		return errors.New("multipart max bytes must fit within configured part bounds")
 	}
-	if s.SessionTTL <= 0 || s.PartURLTTL <= 0 || s.PartURLTTL > maximumURLTTL {
-		return errors.New("multipart session and URL TTLs are invalid")
+	if s.SessionTTL <= 0 || s.PartURLTTL <= 0 || s.PartURLTTL > maximumURLTTL || s.CompletionGrace <= 0 {
+		return errors.New("multipart session, URL TTL, and completion grace are invalid")
 	}
 	return nil
 }
@@ -312,7 +313,7 @@ func (s *Service) CleanupExpired(ctx context.Context, limit int) (CleanupReport,
 		return CleanupReport{}, fmt.Errorf("%w: cleanup limit must be between 1 and 1000", ErrInvalidInput)
 	}
 	now := s.now()
-	sessions, err := s.Sessions.ClaimExpired(ctx, now, limit)
+	sessions, err := s.Sessions.ClaimExpired(ctx, now, now.Add(-s.Config.CompletionGrace), limit)
 	if err != nil {
 		return CleanupReport{}, err
 	}
@@ -325,6 +326,10 @@ func (s *Service) CleanupExpired(ctx context.Context, limit int) (CleanupReport,
 				failure = errors.Join(failure, markErr)
 			}
 			report.Failures = append(report.Failures, failure)
+			continue
+		} else if !errors.Is(headErr, storage.ErrObjectNotFound) {
+			report.Failed++
+			report.Failures = append(report.Failures, fmt.Errorf("session %s object existence check failed: %w", session.ID, headErr))
 			continue
 		}
 		remoteErr := s.Multipart.AbortMultipart(ctx, session.ObjectKey, session.UploadID)

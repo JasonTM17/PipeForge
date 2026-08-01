@@ -2,9 +2,12 @@ package storage
 
 import (
 	"context"
+	"errors"
 	"io"
 	"time"
 )
+
+var ErrObjectNotFound = errors.New("object not found")
 
 type ObjectInfo struct {
 	Key         string

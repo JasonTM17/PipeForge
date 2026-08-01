@@ -14,7 +14,10 @@ import (
 	"github.com/minio/minio-go/v7/pkg/credentials"
 )
 
-const operationTimeout = 30 * time.Second
+const (
+	operationTimeout  = 30 * time.Second
+	objectReadTimeout = 30 * time.Minute
+)
 
 type MinIOConfig struct {
 	Endpoint       string
@@ -75,7 +78,7 @@ func (s *MinIOStore) Head(ctx context.Context, key string) (ObjectInfo, error) {
 	defer cancel()
 	info, err := s.client.StatObject(operationCtx, s.bucket, key, minio.StatObjectOptions{})
 	if err != nil {
-		return ObjectInfo{}, fmt.Errorf("head object %s: %w", key, err)
+		return ObjectInfo{}, wrapObjectError("head", key, err)
 	}
 	return ObjectInfo{Key: key, Size: info.Size, ETag: info.ETag, ContentType: info.ContentType}, nil
 }
@@ -84,16 +87,19 @@ func (s *MinIOStore) Get(ctx context.Context, key string) (io.ReadCloser, error)
 	if s == nil || s.client == nil {
 		return nil, fmt.Errorf("MinIO store is not configured")
 	}
-	operationCtx, cancel := context.WithTimeout(nonNilContext(ctx), operationTimeout)
+	// Multipart completion verifies the SHA-256 by streaming the final object.
+	// Keep reads bounded, but allow the configured 5 GiB upload ceiling to be
+	// read over a slower local or development connection.
+	operationCtx, cancel := context.WithTimeout(nonNilContext(ctx), objectReadTimeout)
 	object, err := s.client.GetObject(operationCtx, s.bucket, key, minio.GetObjectOptions{})
 	if err != nil {
 		cancel()
-		return nil, fmt.Errorf("get object %s: %w", key, err)
+		return nil, wrapObjectError("get", key, err)
 	}
 	if _, err := object.Stat(); err != nil {
 		_ = object.Close()
 		cancel()
-		return nil, fmt.Errorf("stat object %s: %w", key, err)
+		return nil, wrapObjectError("stat", key, err)
 	}
 	return &timedReadCloser{ReadCloser: object, cancel: cancel}, nil
 }
@@ -231,4 +237,12 @@ func nonNilContext(ctx context.Context) context.Context {
 		return context.Background()
 	}
 	return ctx
+}
+
+func wrapObjectError(operation, key string, err error) error {
+	response := minio.ToErrorResponse(err)
+	if response.Code == "NoSuchKey" || response.Code == "NoSuchObject" || response.Code == "NotFound" {
+		return fmt.Errorf("%w: %s object %s: %v", ErrObjectNotFound, operation, key, err)
+	}
+	return fmt.Errorf("%s object %s: %w", operation, key, err)
 }

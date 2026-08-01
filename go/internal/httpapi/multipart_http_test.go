@@ -32,7 +32,7 @@ func TestMultipartHTTPLifecycleAndOwnership(t *testing.T) {
 	sessions := newHTTPMultipartSessionStore()
 	multipartService, err := multipart.NewService(datasetStore, sessions, objects, multipart.Config{
 		PartSize: 5 * 1024 * 1024, MaxParts: 10, MaxBytes: 50 * 1024 * 1024,
-		SessionTTL: time.Hour, PartURLTTL: 10 * time.Minute,
+		SessionTTL: time.Hour, PartURLTTL: 10 * time.Minute, CompletionGrace: time.Hour,
 	})
 	if err != nil {
 		t.Fatalf("multipart NewService returned error: %v", err)
@@ -375,7 +375,7 @@ func (s *httpMultipartSessionStore) MarkFailed(_ context.Context, id uuid.UUID, 
 	return nil
 }
 
-func (s *httpMultipartSessionStore) ClaimExpired(context.Context, time.Time, int) ([]multipart.Session, error) {
+func (s *httpMultipartSessionStore) ClaimExpired(context.Context, time.Time, time.Time, int) ([]multipart.Session, error) {
 	return nil, nil
 }
 

@@ -12,53 +12,55 @@ import (
 )
 
 const (
-	defaultHTTPAddr               = ":8080"
-	defaultMaxConnections         = int32(10)
-	defaultShutdown               = 10 * time.Second
-	defaultAccessTokenTTL         = 15 * time.Minute
-	defaultRefreshTokenTTL        = 30 * 24 * time.Hour
-	defaultDevelopmentJWTKey      = "pipeforge-local-jwt-key-change-me"
-	defaultDevelopmentMinIOKey    = "pipeforge"
-	defaultDevelopmentMinIOSecret = "pipeforge-local-minio-secret"
-	defaultDatasetBucket          = "datasets"
-	defaultMaxUploadBytes         = int64(64 * 1024 * 1024)
-	defaultMultipartPartSize      = int64(8 * 1024 * 1024)
-	defaultMultipartMaxParts      = 10000
-	defaultMultipartMaxBytes      = int64(5 * 1024 * 1024 * 1024)
-	defaultMultipartSessionTTL    = 24 * time.Hour
-	defaultMultipartURLTTL        = 15 * time.Minute
-	defaultMultipartCleanupLimit  = 100
+	defaultHTTPAddr                 = ":8080"
+	defaultMaxConnections           = int32(10)
+	defaultShutdown                 = 10 * time.Second
+	defaultAccessTokenTTL           = 15 * time.Minute
+	defaultRefreshTokenTTL          = 30 * 24 * time.Hour
+	defaultDevelopmentJWTKey        = "pipeforge-local-jwt-key-change-me"
+	defaultDevelopmentMinIOKey      = "pipeforge"
+	defaultDevelopmentMinIOSecret   = "pipeforge-local-minio-secret"
+	defaultDatasetBucket            = "datasets"
+	defaultMaxUploadBytes           = int64(64 * 1024 * 1024)
+	defaultMultipartPartSize        = int64(8 * 1024 * 1024)
+	defaultMultipartMaxParts        = 10000
+	defaultMultipartMaxBytes        = int64(5 * 1024 * 1024 * 1024)
+	defaultMultipartSessionTTL      = 24 * time.Hour
+	defaultMultipartURLTTL          = 15 * time.Minute
+	defaultMultipartCompletionGrace = time.Hour
+	defaultMultipartCleanupLimit    = 100
 )
 
 // Config contains validated runtime settings. Secrets are kept in memory only
 // and are never included in String or logging output.
 type Config struct {
-	Environment           string
-	LogLevel              string
-	HTTPAddr              string
-	DatabaseHost          string
-	DatabasePort          uint16
-	DatabaseName          string
-	DatabaseUser          string
-	DatabasePassword      string
-	DatabaseMaxConns      int32
-	ShutdownTimeout       time.Duration
-	JWTSigningKey         string
-	AccessTokenTTL        time.Duration
-	RefreshTokenTTL       time.Duration
-	MinIOEndpoint         string
-	MinIOPublicEndpoint   string
-	MinIOAccessKey        string
-	MinIOSecretKey        string
-	MinIOSecure           bool
-	DatasetBucket         string
-	MaxUploadBytes        int64
-	MultipartPartSize     int64
-	MultipartMaxParts     int
-	MultipartMaxBytes     int64
-	MultipartSessionTTL   time.Duration
-	MultipartURLTTL       time.Duration
-	MultipartCleanupLimit int
+	Environment              string
+	LogLevel                 string
+	HTTPAddr                 string
+	DatabaseHost             string
+	DatabasePort             uint16
+	DatabaseName             string
+	DatabaseUser             string
+	DatabasePassword         string
+	DatabaseMaxConns         int32
+	ShutdownTimeout          time.Duration
+	JWTSigningKey            string
+	AccessTokenTTL           time.Duration
+	RefreshTokenTTL          time.Duration
+	MinIOEndpoint            string
+	MinIOPublicEndpoint      string
+	MinIOAccessKey           string
+	MinIOSecretKey           string
+	MinIOSecure              bool
+	DatasetBucket            string
+	MaxUploadBytes           int64
+	MultipartPartSize        int64
+	MultipartMaxParts        int
+	MultipartMaxBytes        int64
+	MultipartSessionTTL      time.Duration
+	MultipartURLTTL          time.Duration
+	MultipartCompletionGrace time.Duration
+	MultipartCleanupLimit    int
 }
 
 // Load reads environment variables through getenv so tests can provide a
@@ -84,30 +86,31 @@ func Load(getenv func(string) string) (Config, error) {
 		minioPublicEndpoint = valueOrDefault(minioPublicEndpoint, "localhost:59010")
 	}
 	cfg := Config{
-		Environment:           environment,
-		LogLevel:              valueOrDefault(getenv("PIPEFORGE_LOG_LEVEL"), "info"),
-		HTTPAddr:              valueOrDefault(getenv("PIPEFORGE_HTTP_ADDR"), defaultHTTPAddr),
-		DatabaseHost:          valueOrDefault(getenv("POSTGRES_HOST"), "localhost"),
-		DatabaseName:          valueOrDefault(getenv("POSTGRES_DATABASE"), "pipeforge"),
-		DatabaseUser:          valueOrDefault(getenv("POSTGRES_USER"), "pipeforge"),
-		DatabasePassword:      getenv("POSTGRES_PASSWORD"),
-		DatabaseMaxConns:      defaultMaxConnections,
-		ShutdownTimeout:       defaultShutdown,
-		JWTSigningKey:         jwtSigningKey,
-		AccessTokenTTL:        defaultAccessTokenTTL,
-		RefreshTokenTTL:       defaultRefreshTokenTTL,
-		MinIOEndpoint:         minioEndpoint,
-		MinIOPublicEndpoint:   minioPublicEndpoint,
-		MinIOAccessKey:        minioAccessKey,
-		MinIOSecretKey:        minioSecretKey,
-		DatasetBucket:         valueOrDefault(getenv("MINIO_DATASET_BUCKET"), defaultDatasetBucket),
-		MaxUploadBytes:        defaultMaxUploadBytes,
-		MultipartPartSize:     defaultMultipartPartSize,
-		MultipartMaxParts:     defaultMultipartMaxParts,
-		MultipartMaxBytes:     defaultMultipartMaxBytes,
-		MultipartSessionTTL:   defaultMultipartSessionTTL,
-		MultipartURLTTL:       defaultMultipartURLTTL,
-		MultipartCleanupLimit: defaultMultipartCleanupLimit,
+		Environment:              environment,
+		LogLevel:                 valueOrDefault(getenv("PIPEFORGE_LOG_LEVEL"), "info"),
+		HTTPAddr:                 valueOrDefault(getenv("PIPEFORGE_HTTP_ADDR"), defaultHTTPAddr),
+		DatabaseHost:             valueOrDefault(getenv("POSTGRES_HOST"), "localhost"),
+		DatabaseName:             valueOrDefault(getenv("POSTGRES_DATABASE"), "pipeforge"),
+		DatabaseUser:             valueOrDefault(getenv("POSTGRES_USER"), "pipeforge"),
+		DatabasePassword:         getenv("POSTGRES_PASSWORD"),
+		DatabaseMaxConns:         defaultMaxConnections,
+		ShutdownTimeout:          defaultShutdown,
+		JWTSigningKey:            jwtSigningKey,
+		AccessTokenTTL:           defaultAccessTokenTTL,
+		RefreshTokenTTL:          defaultRefreshTokenTTL,
+		MinIOEndpoint:            minioEndpoint,
+		MinIOPublicEndpoint:      minioPublicEndpoint,
+		MinIOAccessKey:           minioAccessKey,
+		MinIOSecretKey:           minioSecretKey,
+		DatasetBucket:            valueOrDefault(getenv("MINIO_DATASET_BUCKET"), defaultDatasetBucket),
+		MaxUploadBytes:           defaultMaxUploadBytes,
+		MultipartPartSize:        defaultMultipartPartSize,
+		MultipartMaxParts:        defaultMultipartMaxParts,
+		MultipartMaxBytes:        defaultMultipartMaxBytes,
+		MultipartSessionTTL:      defaultMultipartSessionTTL,
+		MultipartURLTTL:          defaultMultipartURLTTL,
+		MultipartCompletionGrace: defaultMultipartCompletionGrace,
+		MultipartCleanupLimit:    defaultMultipartCleanupLimit,
 	}
 
 	port, err := parseUint16(valueOrDefault(getenv("POSTGRES_PORT"), "5432"))
@@ -190,6 +193,12 @@ func Load(getenv func(string) string) (Config, error) {
 			return Config{}, err
 		}
 	}
+	if raw := getenv("PIPEFORGE_MULTIPART_COMPLETION_GRACE"); raw != "" {
+		cfg.MultipartCompletionGrace, err = parsePositiveDuration(raw, "PIPEFORGE_MULTIPART_COMPLETION_GRACE")
+		if err != nil {
+			return Config{}, err
+		}
+	}
 	if raw := getenv("PIPEFORGE_MULTIPART_CLEANUP_LIMIT"); raw != "" {
 		cleanupLimit, parseErr := strconv.Atoi(raw)
 		if parseErr != nil || cleanupLimit < 1 || cleanupLimit > 1000 {
@@ -234,7 +243,7 @@ func (c Config) validate() error {
 	if strings.TrimSpace(c.DatabaseHost) == "" || strings.TrimSpace(c.DatabaseName) == "" || strings.TrimSpace(c.DatabaseUser) == "" {
 		return errors.New("PostgreSQL host, database, and user must not be empty")
 	}
-	if c.DatabasePort == 0 || c.DatabaseMaxConns < 1 || c.ShutdownTimeout <= 0 || c.AccessTokenTTL <= 0 || c.RefreshTokenTTL <= 0 || c.MaxUploadBytes <= 0 || c.MultipartPartSize < 5*1024*1024 || c.MultipartPartSize > 5*1024*1024*1024 || c.MultipartMaxParts < 1 || c.MultipartMaxParts > 10000 || c.MultipartMaxBytes <= 0 || c.MultipartSessionTTL <= 0 || c.MultipartURLTTL <= 0 || c.MultipartURLTTL > 7*24*time.Hour || c.MultipartCleanupLimit < 1 || c.MultipartCleanupLimit > 1000 {
+	if c.DatabasePort == 0 || c.DatabaseMaxConns < 1 || c.ShutdownTimeout <= 0 || c.AccessTokenTTL <= 0 || c.RefreshTokenTTL <= 0 || c.MaxUploadBytes <= 0 || c.MultipartPartSize < 5*1024*1024 || c.MultipartPartSize > 5*1024*1024*1024 || c.MultipartMaxParts < 1 || c.MultipartMaxParts > 10000 || c.MultipartMaxBytes <= 0 || c.MultipartSessionTTL <= 0 || c.MultipartURLTTL <= 0 || c.MultipartURLTTL > 7*24*time.Hour || c.MultipartCompletionGrace <= 0 || c.MultipartCleanupLimit < 1 || c.MultipartCleanupLimit > 1000 {
 		return errors.New("PostgreSQL, connection, timeout, upload, and multipart limits must be positive and bounded")
 	}
 	if c.MultipartMaxBytes < c.MultipartPartSize || c.MultipartMaxBytes > c.MultipartPartSize*int64(c.MultipartMaxParts) {

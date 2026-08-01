@@ -368,12 +368,12 @@ func (s *fakeSessionStore) MarkFailed(_ context.Context, sessionID uuid.UUID, la
 	return nil
 }
 
-func (s *fakeSessionStore) ClaimExpired(_ context.Context, now time.Time, limit int) ([]Session, error) {
+func (s *fakeSessionStore) ClaimExpired(_ context.Context, now, completionStaleBefore time.Time, limit int) ([]Session, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	claimed := make([]Session, 0, limit)
 	for id, session := range s.sessions {
-		if len(claimed) >= limit || session.ExpiresAt.After(now) || (session.State != StateInitiated && session.State != StateCompleting && session.State != StateAborting) {
+		if len(claimed) >= limit || session.ExpiresAt.After(now) || (session.State != StateInitiated && session.State != StateCompleting && session.State != StateAborting) || (session.State == StateCompleting && session.UpdatedAt.After(completionStaleBefore)) {
 			continue
 		}
 		session.State, session.UpdatedAt, session.LastError = StateAborting, now, stringPointer("session_expired")
@@ -413,6 +413,7 @@ type fakeObjectStore struct {
 	objects map[string][]byte
 	uploads map[string]*fakeMultipartUpload
 	nextID  int
+	headErr error
 }
 
 type fakeMultipartUpload struct {
@@ -440,9 +441,12 @@ func (s *fakeObjectStore) Put(_ context.Context, key string, reader io.Reader, _
 func (s *fakeObjectStore) Head(_ context.Context, key string) (storage.ObjectInfo, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if s.headErr != nil {
+		return storage.ObjectInfo{}, s.headErr
+	}
 	value, ok := s.objects[key]
 	if !ok {
-		return storage.ObjectInfo{}, errors.New("object not found")
+		return storage.ObjectInfo{}, storage.ErrObjectNotFound
 	}
 	return storage.ObjectInfo{Key: key, Size: int64(len(value))}, nil
 }
@@ -452,7 +456,7 @@ func (s *fakeObjectStore) Get(_ context.Context, key string) (io.ReadCloser, err
 	defer s.mu.Unlock()
 	value, ok := s.objects[key]
 	if !ok {
-		return nil, errors.New("object not found")
+		return nil, storage.ErrObjectNotFound
 	}
 	return io.NopCloser(bytes.NewReader(append([]byte(nil), value...))), nil
 }

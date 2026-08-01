@@ -3,7 +3,6 @@ package dataset
 import (
 	"bytes"
 	"context"
-	"errors"
 	"io"
 	"sync"
 	"time"
@@ -233,7 +232,7 @@ func (s *memoryObjectStore) Head(_ context.Context, key string) (storage.ObjectI
 	defer s.mu.Unlock()
 	value, ok := s.objects[key]
 	if !ok {
-		return storage.ObjectInfo{}, errors.New("object not found")
+		return storage.ObjectInfo{}, storage.ErrObjectNotFound
 	}
 	return storage.ObjectInfo{Key: key, Size: int64(len(value))}, nil
 }
@@ -243,7 +242,7 @@ func (s *memoryObjectStore) Get(_ context.Context, key string) (io.ReadCloser, e
 	defer s.mu.Unlock()
 	value, ok := s.objects[key]
 	if !ok {
-		return nil, errors.New("object not found")
+		return nil, storage.ErrObjectNotFound
 	}
 	return io.NopCloser(bytes.NewReader(value)), nil
 }

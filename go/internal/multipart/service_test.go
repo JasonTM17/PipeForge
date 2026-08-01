@@ -102,6 +102,48 @@ func TestServiceAbortAndCleanupAreIdempotent(t *testing.T) {
 	}
 }
 
+func TestServiceCleanupRetriesWhenObjectCheckFails(t *testing.T) {
+	service, datasets, sessions, objects, principal, datasetID := newMultipartService(t)
+	payload := multipartPayload(service.Config.PartSize + 3)
+	session, _ := prepareSession(t, service, datasets, objects, principal, datasetID, payload, "")
+	objects.headErr = errors.New("object store temporarily unavailable")
+	service.Now = func() time.Time { return time.Now().UTC().Add(2 * time.Hour) }
+
+	report, err := service.CleanupExpired(context.Background(), 10)
+	if err != nil {
+		t.Fatalf("CleanupExpired returned error: %v", err)
+	}
+	if report.Claimed != 1 || report.Failed != 1 || report.Expired != 0 {
+		t.Fatalf("unexpected cleanup report: %+v", report)
+	}
+	if sessions.sessions[session.ID].State != StateAborting {
+		t.Fatalf("transient object-store error should leave session retryable: %+v", sessions.sessions[session.ID])
+	}
+	if datasets.versions[session.VersionID].State != "UPLOADING" {
+		t.Fatalf("transient object-store error changed version state: %+v", datasets.versions[session.VersionID])
+	}
+}
+
+func TestServiceCleanupLeavesFreshCompletionClaimableByItsOwner(t *testing.T) {
+	service, datasets, sessions, objects, principal, datasetID := newMultipartService(t)
+	payload := multipartPayload(service.Config.PartSize + 3)
+	session, _ := prepareSession(t, service, datasets, objects, principal, datasetID, payload, "")
+	now := time.Now().UTC()
+	session.State = StateCompleting
+	session.ExpiresAt = now.Add(-time.Minute)
+	session.UpdatedAt = now
+	sessions.sessions[session.ID] = session
+	service.Now = func() time.Time { return now }
+
+	report, err := service.CleanupExpired(context.Background(), 10)
+	if err != nil {
+		t.Fatalf("CleanupExpired returned error: %v", err)
+	}
+	if report.Claimed != 0 || sessions.sessions[session.ID].State != StateCompleting {
+		t.Fatalf("fresh completion was incorrectly claimed: report=%+v session=%+v", report, sessions.sessions[session.ID])
+	}
+}
+
 func newMultipartService(t *testing.T) (*Service, *fakeDatasetStore, *fakeSessionStore, *fakeObjectStore, auth.Principal, uuid.UUID) {
 	t.Helper()
 	ownerID := uuid.New()
@@ -110,7 +152,7 @@ func newMultipartService(t *testing.T) (*Service, *fakeDatasetStore, *fakeSessio
 	objects := newFakeObjectStore()
 	service, err := NewService(datasets, sessions, objects, Config{
 		PartSize: 5 * 1024 * 1024, MaxParts: 10, MaxBytes: 50 * 1024 * 1024,
-		SessionTTL: time.Hour, PartURLTTL: 10 * time.Minute,
+		SessionTTL: time.Hour, PartURLTTL: 10 * time.Minute, CompletionGrace: time.Hour,
 	})
 	if err != nil {
 		t.Fatalf("NewService returned error: %v", err)

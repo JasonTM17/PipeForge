@@ -180,21 +180,22 @@ func (r *Repository) MarkFailed(ctx context.Context, sessionID uuid.UUID, lastEr
 	return nil
 }
 
-func (r *Repository) ClaimExpired(ctx context.Context, now time.Time, limit int) ([]Session, error) {
+func (r *Repository) ClaimExpired(ctx context.Context, now, completionStaleBefore time.Time, limit int) ([]Session, error) {
 	rows, err := r.pool.Query(ctx, `
 WITH claimed AS (
     SELECT id
     FROM upload_sessions
-    WHERE expires_at <= $1 AND state IN ('INITIATED', 'COMPLETING', 'ABORTING')
+    WHERE expires_at <= $1
+      AND (state IN ('INITIATED', 'ABORTING') OR (state = 'COMPLETING' AND updated_at <= $2))
     ORDER BY expires_at, id
     FOR UPDATE SKIP LOCKED
-    LIMIT $2
+    LIMIT $3
 )
 UPDATE upload_sessions s
 SET state = 'ABORTING', updated_at = $1, last_error = 'session_expired'
 FROM claimed
 WHERE s.id = claimed.id
-RETURNING s.id`, now, limit)
+RETURNING s.id`, now, completionStaleBefore, limit)
 	if err != nil {
 		return nil, fmt.Errorf("claim expired multipart sessions: %w", err)
 	}

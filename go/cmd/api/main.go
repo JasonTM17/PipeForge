@@ -60,7 +60,7 @@ func run() error {
 	}
 	multipartService, err := multipart.NewService(dataset.NewRepository(pool), multipart.NewRepository(pool), objectStore, multipart.Config{
 		PartSize: cfg.MultipartPartSize, MaxParts: cfg.MultipartMaxParts, MaxBytes: cfg.MultipartMaxBytes,
-		SessionTTL: cfg.MultipartSessionTTL, PartURLTTL: cfg.MultipartURLTTL,
+		SessionTTL: cfg.MultipartSessionTTL, PartURLTTL: cfg.MultipartURLTTL, CompletionGrace: cfg.MultipartCompletionGrace,
 	})
 	if err != nil {
 		return err
