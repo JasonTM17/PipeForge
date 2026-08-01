@@ -1,7 +1,7 @@
 ---
 phase: 12
 title: Data quality
-status: in-progress
+status: completed
 priority: P1
 effort: 5d
 dependencies:
@@ -29,7 +29,7 @@ Define and implement safe data-quality rule contracts, core null/unique/range/fo
 
 ## Related Code Files
 
-- Create: `go/internal/quality/`, `go/migrations/000007_quality_rules.sql`
+- Create: `go/internal/quality/`, `go/migrations/000008_quality_rules.sql`
 - Create: `python/src/pipeforge_worker/validators/`, quality result models
 - Create/modify: quality contracts, API handlers, report serializer, tests
 - Create: `python/tests/test_validators.py`, Go rule/auth tests
@@ -46,11 +46,11 @@ Define and implement safe data-quality rule contracts, core null/unique/range/fo
 
 ## Success Criteria
 
-- [ ] Supported rules produce correct counts/percentages across chunk boundaries.
-- [ ] Invalid/missing columns classify deterministically and do not trigger infinite retries.
-- [ ] Custom expressions cannot execute arbitrary code; unsupported requests fail closed.
-- [ ] Quality artifacts are bounded, versioned, and available through authorized result paths.
-- [ ] Rule CRUD and job snapshots preserve ownership/audit semantics.
+- [x] Supported rules produce correct counts/percentages across chunk boundaries.
+- [x] Invalid/missing columns classify deterministically and do not trigger infinite retries.
+- [x] Custom expressions cannot execute arbitrary code; unsupported requests fail closed.
+- [x] Quality artifacts are bounded, versioned, and use the attempt-scoped storage contract; Phase 14 owns their public authorized result path.
+- [x] Rule CRUD and job snapshots preserve ownership/audit semantics.
 
 ## Validation
 
@@ -70,9 +70,8 @@ No `eval`/`exec`, no arbitrary imports, strict regex/input limits, protected art
 
 ## Next Steps
 
-Phase 13 adds IQR and Z-score anomaly detection using the same bounded numeric pipeline.
+Phase 13 adds IQR and Z-score anomaly detection using the same bounded numeric pipeline. Phase 14 will expose the authorized quality-artifact listing/download path after Go result acceptance exists.
 
 ## Unresolved Questions
 
 - None blocking; `CUSTOM_EXPRESSION` remains explicitly deferred until a safe expression language is designed and tested.
-
