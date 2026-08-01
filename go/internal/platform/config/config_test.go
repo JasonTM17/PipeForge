@@ -17,6 +17,9 @@ func TestLoadUsesDefaults(t *testing.T) {
 	if cfg.ShutdownTimeout != defaultShutdown {
 		t.Fatalf("unexpected shutdown timeout: %s", cfg.ShutdownTimeout)
 	}
+	if cfg.AccessTokenTTL != defaultAccessTokenTTL || cfg.RefreshTokenTTL != defaultRefreshTokenTTL || cfg.JWTSigningKey == "" {
+		t.Fatalf("unexpected identity defaults: %+v", cfg)
+	}
 }
 
 func TestLoadParsesOverrides(t *testing.T) {
@@ -26,13 +29,28 @@ func TestLoadParsesOverrides(t *testing.T) {
 		"POSTGRES_PORT":                "55433",
 		"PIPEFORGE_DATABASE_MAX_CONNS": "4",
 		"PIPEFORGE_SHUTDOWN_TIMEOUT":   "3s",
+		"PIPEFORGE_ACCESS_TOKEN_TTL":   "10m",
+		"PIPEFORGE_REFRESH_TOKEN_TTL":  "48h",
+		"JWT_SIGNING_KEY":              "test-jwt-signing-key-with-32-bytes!!",
 	}
 	cfg, err := Load(func(key string) string { return values[key] })
 	if err != nil {
 		t.Fatalf("Load returned error: %v", err)
 	}
-	if cfg.DatabasePort != 55433 || cfg.DatabaseMaxConns != 4 || cfg.ShutdownTimeout != 3*time.Second {
+	if cfg.DatabasePort != 55433 || cfg.DatabaseMaxConns != 4 || cfg.ShutdownTimeout != 3*time.Second || cfg.AccessTokenTTL != 10*time.Minute || cfg.RefreshTokenTTL != 48*time.Hour {
 		t.Fatalf("unexpected overrides: %+v", cfg)
+	}
+}
+
+func TestLoadRejectsShortJWTSigningKey(t *testing.T) {
+	_, err := Load(func(key string) string {
+		if key == "JWT_SIGNING_KEY" {
+			return "too-short"
+		}
+		return ""
+	})
+	if err == nil || !strings.Contains(err.Error(), "JWT_SIGNING_KEY") {
+		t.Fatalf("expected JWT key validation error, got %v", err)
 	}
 }
 
