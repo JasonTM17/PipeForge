@@ -35,8 +35,8 @@ func ValidateCreateCommand(command CreateCommand) (string, error) {
 	if len(command.IdempotencyKey) > MaxIdempotencyKeySize {
 		return "", fmt.Errorf("%w: idempotency key is too long", ErrInvalidInput)
 	}
-	if command.TraceID == "" || command.CorrelationID == "" || command.CausationID == "" {
-		return "", fmt.Errorf("%w: trace context is required", ErrInvalidInput)
+	if command.TraceID == "" {
+		return "", fmt.Errorf("%w: trace ID is required", ErrInvalidInput)
 	}
 	return Fingerprint(command.Operations)
 }

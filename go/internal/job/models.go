@@ -37,6 +37,7 @@ const (
 var (
 	ErrInvalidInput        = errors.New("invalid job input")
 	ErrJobNotFound         = errors.New("job not found")
+	ErrVersionNotFound     = errors.New("dataset version not found")
 	ErrJobState            = errors.New("job is not in the required state")
 	ErrInvalidTransition   = errors.New("invalid job state transition")
 	ErrIdempotencyConflict = errors.New("idempotency key was already used with a different request")
@@ -102,6 +103,12 @@ type CreateCommand struct {
 	CausationID      string
 }
 
+type CreateRequest struct {
+	Operations  []Operation `json:"operations"`
+	Priority    int16       `json:"priority,omitempty"`
+	MaxAttempts int16       `json:"maxAttempts,omitempty"`
+}
+
 type ListQuery struct {
 	OwnerUserID *uuid.UUID
 	Page        int
@@ -110,18 +117,20 @@ type ListQuery struct {
 }
 
 type CancelCommand struct {
-	JobID       uuid.UUID
-	ActorUserID uuid.UUID
-	Reason      string
-	TraceID     string
-	RequestID   string
+	JobID           uuid.UUID
+	ActorUserID     uuid.UUID
+	Reason          string
+	TraceID         string
+	RequestID       string
+	AllowCrossOwner bool
 }
 
 type RetryCommand struct {
-	JobID       uuid.UUID
-	ActorUserID uuid.UUID
-	TraceID     string
-	RequestID   string
+	JobID           uuid.UUID
+	ActorUserID     uuid.UUID
+	TraceID         string
+	RequestID       string
+	AllowCrossOwner bool
 }
 
 type QueuedJob struct {
@@ -196,6 +205,10 @@ func ValidateTransition(from, to string) error {
 
 func IsTerminal(state string) bool {
 	return state == StateSucceeded || state == StateCancelled
+}
+
+func IsKnownState(state string) bool {
+	return isJobState(state)
 }
 
 func isJobState(state string) bool {
