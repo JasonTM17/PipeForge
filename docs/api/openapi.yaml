@@ -1,10 +1,10 @@
 openapi: 3.0.3
 info:
   title: PipeForge API
-  version: 0.4.0-multipart
+  version: 0.5.0-jobs
   description: >-
     Implemented HTTP contract for the Go control plane foundation, identity
-    flows, and immutable dataset metadata with streamed uploads and presigned multipart sessions.
+    flows, immutable dataset metadata, presigned multipart sessions, and idempotent processing jobs.
 servers:
   - url: http://localhost:58080
 paths:
@@ -372,6 +372,180 @@ paths:
             application/problem+json:
               schema:
                 $ref: '#/components/schemas/Problem'
+  /api/v1/datasets/{datasetVersionID}/jobs:
+    parameters:
+      - name: datasetVersionID
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: Idempotency-Key
+        in: header
+        required: false
+        schema:
+          type: string
+          minLength: 1
+          maxLength: 128
+    post:
+      operationId: createProcessingJob
+      security:
+        - bearerAuth: []
+        - apiKeyAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateJobRequest'
+      responses:
+        '201':
+          description: Processing job created and queued through the transactional outbox.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Job'
+        '200':
+          description: Existing job returned for an idempotent replay.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Job'
+        '400':
+          $ref: '#/components/responses/InvalidRequest'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/ResourceConflict'
+        '429':
+          $ref: '#/components/responses/QuotaExceeded'
+  /api/v1/jobs:
+    get:
+      operationId: listProcessingJobs
+      security:
+        - bearerAuth: []
+        - apiKeyAuth: []
+      parameters:
+        - name: page
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+        - name: pageSize
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+        - name: state
+          in: query
+          schema:
+            $ref: '#/components/schemas/JobState'
+      responses:
+        '200':
+          description: Jobs visible to the authenticated owner or administrator.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JobListResponse'
+        '400':
+          $ref: '#/components/responses/InvalidRequest'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+  /api/v1/jobs/{jobID}:
+    parameters:
+      - name: jobID
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    get:
+      operationId: getProcessingJob
+      security:
+        - bearerAuth: []
+        - apiKeyAuth: []
+      responses:
+        '200':
+          description: Job resource.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Job'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /api/v1/jobs/{jobID}/cancel:
+    parameters:
+      - name: jobID
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    post:
+      operationId: requestJobCancellation
+      security:
+        - bearerAuth: []
+        - apiKeyAuth: []
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CancelJobRequest'
+      responses:
+        '200':
+          description: Job moved to CANCEL_REQUESTED or returned idempotently.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Job'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/ResourceConflict'
+  /api/v1/jobs/{jobID}/retry:
+    parameters:
+      - name: jobID
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    post:
+      operationId: requestJobRetry
+      security:
+        - bearerAuth: []
+        - apiKeyAuth: []
+      responses:
+        '200':
+          description: Failed job re-queued with a new attempt.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Job'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/ResourceConflict'
   /v1/datasets/{datasetID}/uploads:
     post:
       operationId: initiateMultipartUpload
@@ -657,6 +831,12 @@ components:
         application/problem+json:
           schema:
             $ref: '#/components/schemas/Problem'
+    QuotaExceeded:
+      description: The owner has reached the bounded queued-job quota.
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
     UploadTooLarge:
       description: The upload exceeds the configured maximum size.
       content:
@@ -874,6 +1054,125 @@ components:
           type: string
           format: date-time
           nullable: true
+    JobOperation:
+      type: object
+      required: [type, config]
+      additionalProperties: false
+      properties:
+        type:
+          type: string
+          minLength: 1
+          maxLength: 64
+          enum: [PROFILE_DATASET, CHECK_MISSING_VALUES, CHECK_DUPLICATES, DETECT_OUTLIERS]
+        config:
+          type: object
+          maxProperties: 32
+          additionalProperties: true
+    CreateJobRequest:
+      type: object
+      required: [operations]
+      additionalProperties: false
+      properties:
+        operations:
+          type: array
+          minItems: 1
+          maxItems: 32
+          items:
+            $ref: '#/components/schemas/JobOperation'
+        priority:
+          type: integer
+          format: int32
+          minimum: 0
+          maximum: 100
+          default: 0
+        maxAttempts:
+          type: integer
+          format: int32
+          minimum: 1
+          maximum: 20
+          default: 5
+    CancelJobRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        reason:
+          type: string
+          maxLength: 500
+    JobState:
+      type: string
+      enum: [CREATED, QUEUED, LEASED, RUNNING, SUCCEEDED, FAILED_RETRYABLE, FAILED_PERMANENT, CANCEL_REQUESTED, CANCELLED, DEAD_LETTERED]
+    Job:
+      type: object
+      required: [id, ownerUserId, datasetVersionId, state, operations, requestFingerprint, priority, maxAttempts, createdAt, updatedAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        ownerUserId:
+          type: string
+          format: uuid
+        datasetVersionId:
+          type: string
+          format: uuid
+        state:
+          $ref: '#/components/schemas/JobState'
+        operations:
+          type: array
+          items:
+            $ref: '#/components/schemas/JobOperation'
+        requestFingerprint:
+          type: string
+          pattern: '^[0-9a-f]{64}$'
+        priority:
+          type: integer
+          format: int32
+        maxAttempts:
+          type: integer
+          format: int32
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        queuedAt:
+          type: string
+          format: date-time
+          nullable: true
+        startedAt:
+          type: string
+          format: date-time
+          nullable: true
+        cancelRequestedAt:
+          type: string
+          format: date-time
+          nullable: true
+        completedAt:
+          type: string
+          format: date-time
+          nullable: true
+        finishedAt:
+          type: string
+          format: date-time
+          nullable: true
+        lastErrorCode:
+          type: string
+          nullable: true
+    JobListResponse:
+      type: object
+      required: [items, page, pageSize, total]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Job'
+        page:
+          type: integer
+        pageSize:
+          type: integer
+        total:
+          type: integer
+          format: int64
     DatasetListResponse:
       type: object
       required: [items, page, pageSize, total]
