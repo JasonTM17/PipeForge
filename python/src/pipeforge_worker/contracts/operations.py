@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from enum import StrEnum
@@ -64,13 +65,7 @@ def _validate_config(
         _validate_columns(config, "keyColumns", operation_type, index)
         return
     if operation_type is OperationType.DETECT_OUTLIERS:
-        _require_keys(config, {"column", "method"}, operation_type, index)
-        column = config["column"]
-        method = config["method"]
-        if not isinstance(column, str) or not _is_safe_column(column):
-            raise OperationConfigError(f"operation {index}.column is invalid")
-        if method not in {"IQR", "Z_SCORE"}:
-            raise OperationConfigError(f"operation {index}.method is invalid")
+        _validate_outlier_config(config, index)
         return
     if operation_type is OperationType.VALIDATE_QUALITY:
         _validate_quality_config(config, index)
@@ -158,8 +153,51 @@ def _validate_quality_config(config: Mapping[str, object], index: int) -> None:
         raise OperationConfigError(f"operation {index}.rules must contain objects")
 
 
+def _validate_outlier_config(config: Mapping[str, object], index: int) -> None:
+    allowed = {
+        "column",
+        "method",
+        "threshold",
+        "nullPolicy",
+        "minimumSampleSize",
+        "sampleOutputLimit",
+    }
+    unknown = set(config) - allowed
+    if unknown:
+        raise OperationConfigError(
+            f"operation {index} DETECT_OUTLIERS has unknown fields: {sorted(unknown)}"
+        )
+    required = {"column", "method"}
+    missing = required - set(config)
+    if missing:
+        raise OperationConfigError(
+            f"operation {index} DETECT_OUTLIERS is missing fields: {sorted(missing)}"
+        )
+    column = config["column"]
+    if not isinstance(column, str) or not _is_safe_column(column):
+        raise OperationConfigError(f"operation {index}.column is invalid")
+    if config["method"] not in {"IQR", "Z_SCORE", "MODIFIED_Z_SCORE"}:
+        raise OperationConfigError(f"operation {index}.method is invalid")
+    if "threshold" in config:
+        _bounded_float(config["threshold"], 0.0001, 1_000, "threshold", index)
+    if "nullPolicy" in config and config["nullPolicy"] not in {"SKIP", "FAIL"}:
+        raise OperationConfigError(f"operation {index}.nullPolicy is invalid")
+    if "minimumSampleSize" in config:
+        _bounded_int(config["minimumSampleSize"], 3, 1_000_000, "minimumSampleSize", index)
+    if "sampleOutputLimit" in config:
+        _bounded_int(config["sampleOutputLimit"], 0, 128, "sampleOutputLimit", index)
+
+
 def _bounded_int(value: object, minimum: int, maximum: int, name: str, index: int) -> None:
     if isinstance(value, bool) or not isinstance(value, int) or not minimum <= value <= maximum:
+        raise OperationConfigError(f"operation {index}.{name} is outside the supported bound")
+
+
+def _bounded_float(value: object, minimum: float, maximum: float, name: str, index: int) -> None:
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        raise OperationConfigError(f"operation {index}.{name} is outside the supported bound")
+    numeric = float(value)
+    if not math.isfinite(numeric) or not minimum <= numeric <= maximum:
         raise OperationConfigError(f"operation {index}.{name} is outside the supported bound")
 
 

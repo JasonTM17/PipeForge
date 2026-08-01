@@ -1,0 +1,20 @@
+{
+  "schemaVersion": "anomaly.report.v1",
+  "column": "amount",
+  "method": "IQR",
+  "threshold": 1.5,
+  "status": "ANOMALIES_FOUND",
+  "errorCode": null,
+  "minimumSampleSize": 5,
+  "totalNumericCount": 101,
+  "numericSampleCount": 101,
+  "evaluatedRowCount": 101,
+  "anomalyCount": 2,
+  "sampleOutputLimit": 128,
+  "anomalyReferences": [
+    { "rowNumber": 42, "rowHash": "0123456789abcdef" }
+  ],
+  "warnings": [],
+  "durationMs": 12.5,
+  "artifactRef": null
+}

@@ -1,0 +1,38 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://pipeforge.dev/contracts/anomaly.report.v1.schema.json",
+  "title": "PipeForge anomaly report v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "column", "method", "threshold", "status", "errorCode", "minimumSampleSize", "totalNumericCount", "numericSampleCount", "evaluatedRowCount", "anomalyCount", "sampleOutputLimit", "anomalyReferences", "warnings", "durationMs", "artifactRef"],
+  "properties": {
+    "schemaVersion": { "const": "anomaly.report.v1" },
+    "column": { "type": "string", "pattern": "^[A-Za-z_][A-Za-z0-9_]{0,127}$" },
+    "method": { "enum": ["IQR", "Z_SCORE", "MODIFIED_Z_SCORE"] },
+    "threshold": { "type": "number", "exclusiveMinimum": 0, "maximum": 1000 },
+    "status": { "enum": ["PASSED", "ANOMALIES_FOUND", "SKIPPED", "ERROR"] },
+    "errorCode": { "type": ["string", "null"] },
+    "minimumSampleSize": { "type": "integer", "minimum": 3, "maximum": 1000000 },
+    "totalNumericCount": { "type": "integer", "minimum": 0 },
+    "numericSampleCount": { "type": "integer", "minimum": 0 },
+    "evaluatedRowCount": { "type": "integer", "minimum": 0 },
+    "anomalyCount": { "type": "integer", "minimum": 0 },
+    "sampleOutputLimit": { "type": "integer", "minimum": 0, "maximum": 128 },
+    "anomalyReferences": {
+      "type": "array",
+      "maxItems": 128,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["rowNumber", "rowHash"],
+        "properties": {
+          "rowNumber": { "type": "integer", "minimum": 1 },
+          "rowHash": { "type": "string", "pattern": "^[0-9a-f]{16}$" }
+        }
+      }
+    },
+    "warnings": { "type": "array", "maxItems": 16, "items": { "type": "string", "maxLength": 128 } },
+    "durationMs": { "type": "number", "minimum": 0 },
+    "artifactRef": { "type": ["string", "null"] }
+  }
+}

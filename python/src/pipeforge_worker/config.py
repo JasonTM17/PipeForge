@@ -60,7 +60,13 @@ class Settings(BaseSettings):
         validation_alias=AliasChoices("PIPEFORGE_WORKER_VERSION", "WORKER_VERSION"),
     )
     supported_operations: tuple[str, ...] = Field(
-        default=("PROFILE_DATASET", "CHECK_MISSING_VALUES", "CHECK_DUPLICATES", "DETECT_OUTLIERS"),
+        default=(
+            "PROFILE_DATASET",
+            "CHECK_MISSING_VALUES",
+            "CHECK_DUPLICATES",
+            "VALIDATE_QUALITY",
+            "DETECT_OUTLIERS",
+        ),
         validation_alias=AliasChoices("PIPEFORGE_WORKER_OPERATIONS", "WORKER_OPERATIONS"),
     )
     max_concurrency: int = Field(
