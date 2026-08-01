@@ -1,0 +1,69 @@
+openapi: 3.0.3
+info:
+  title: PipeForge API
+  version: 0.1.0-foundation
+  description: >-
+    Foundation contract for PipeForge. Business resources are added only when
+    their control-plane behavior is implemented and tested.
+servers:
+  - url: http://localhost:58080
+paths:
+  /health/live:
+    get:
+      operationId: getLiveness
+      responses:
+        '200':
+          description: Process is alive.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+  /health/ready:
+    get:
+      operationId: getReadiness
+      responses:
+        '200':
+          description: Required dependencies are ready.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+        '503':
+          description: A required dependency is unavailable.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+  /metrics:
+    get:
+      operationId: getMetrics
+      responses:
+        '200':
+          description: Prometheus metrics.
+          content:
+            text/plain: {}
+components:
+  schemas:
+    HealthResponse:
+      type: object
+      required: [status]
+      properties:
+        status:
+          type: string
+          enum: [ok, ready]
+    Problem:
+      type: object
+      required: [statusCode, code, message, requestId]
+      properties:
+        statusCode:
+          type: integer
+        code:
+          type: string
+        message:
+          type: string
+        requestId:
+          type: string
+        details:
+          type: object
+          additionalProperties: true
+

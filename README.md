@@ -32,15 +32,15 @@ plans/          Persistent implementation plan and phase reports
 The completed local environment will require:
 
 - Docker Engine with Compose v2
-- Go (version pinned in `go/go.mod` once Phase 3 lands)
+- Go 1.23 (the module and build image are pinned to the Go 1.23 toolchain line)
 - Python 3.12+ with a virtual environment
 - GNU Make or the documented PowerShell equivalents
 
-No cloud account or production credential is required for local development. `.env.example` currently contains blank placeholders; infrastructure phases will make the keys active. Copy it to `.env` locally when needed and never commit `.env`.
+No cloud account or production credential is required for local development. `.env.example` contains development-only local defaults. Copy it to `.env` locally when needed and never commit `.env`.
 
 ## Current local environment
 
-The dependency stack is now runnable; Go/Python application services are added in later phases. Start PostgreSQL, RabbitMQ, MinIO, and the initialization jobs with:
+The dependency stack and Go API foundation are runnable. Start PostgreSQL, RabbitMQ, MinIO, and the initialization jobs with:
 
 ```text
 copy .env.example .env
@@ -53,9 +53,16 @@ Optional monitoring services:
 docker compose --profile monitoring up -d prometheus grafana
 ```
 
-Default host ports are isolated from common local stacks: PostgreSQL `55433`, RabbitMQ `55672`/management `55673`, MinIO `59010`/console `59011`, Prometheus `59090`, and Grafana `53010`. Change them in `.env` if needed.
+Default host ports are isolated from common local stacks: API `58080`, PostgreSQL `55433`, RabbitMQ `55672`/management `55673`, MinIO `59010`/console `59011`, Prometheus `59090`, and Grafana `53010`. Change them in `.env` if needed.
 
-The database migration and complete application startup commands (`make migrate`, `make dev` with Go/Python services) will be added only with their actual implementation and validation. You can inspect the plan and validate the worktree at any time:
+Apply the foundation migration after bootstrapping dependencies, then start the API with the Compose stack:
+
+```text
+make migrate
+make dev
+```
+
+You can inspect the plan and validate the worktree at any time:
 
 ```powershell
 git status --short
