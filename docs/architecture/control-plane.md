@@ -27,11 +27,13 @@ flowchart TB
 - A result is accepted only when its job, attempt, lease, and worker identity match the current authoritative records.
 - Resource ownership and scope checks occur in domain services, not only in HTTP handlers.
 - Dataset version uploads stream through the Go service into MinIO; PostgreSQL records a version only after object size, checksum, and existence are verified.
+- Multipart sessions and registered parts are authoritative in PostgreSQL. Presigned URLs contain only a server-generated object key and opaque upload scope; completion verifies ordered parts, object size, checksum, and detected format before making the version available.
+- Expiry cleanup claims at most the configured batch limit, aborts remote multipart state, fails the staged version, and records an expired terminal session. Fresh completion attempts receive a configurable grace window; transient object-store errors remain retryable, while an existing final object is quarantined for reconciliation. Re-running the command is safe.
 - Internal errors and diagnostic references stay server-side; public problem responses expose stable codes and request IDs.
 
 ## Runtime processes
 
 - `go/cmd/api`: synchronous HTTP request handling and lightweight dependency checks.
-- `go/cmd/scheduler`: outbox dispatch, fair job selection, lease expiry, retry scheduling, and upload cleanup loops.
+- `go/cmd/scheduler`: bounded one-shot cleanup command now; future outbox dispatch, fair job selection, lease expiry, and retry scheduling loops.
 - `go/cmd/result-consumer`: RabbitMQ result/event consumer with manual acknowledgements.
 - `go/cmd/pipectl`: public API client; never connects to data stores directly.

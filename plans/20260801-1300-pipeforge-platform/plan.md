@@ -4,7 +4,7 @@ description: >-
   Build PipeForge as a production-oriented Go control plane and Python data
   plane with durable messaging, object storage, reliable job execution, and
   end-to-end verification.
-status: pending
+status: in-progress
 priority: P1
 effort: 10w
 branch: main
@@ -74,8 +74,8 @@ PipeForge is a from-scratch monorepo for distributed dataset processing. The Go 
 | 3 | [Go API foundation](./phase-03-go-api-foundation.md) | Completed |
 | 4 | [Identity](./phase-04-identity.md) | Completed |
 | 5 | [Dataset metadata](./phase-05-dataset-metadata.md) | Completed |
-| 6 | [Multipart upload](./phase-06-multipart-upload.md) | Pending |
-| 7 | [Contracts and queue](./phase-07-contracts-and-queue.md) | Pending |
+| 6 | [Multipart upload](./phase-06-multipart-upload.md) | Completed |
+| 7 | [Contracts and queue](./phase-07-contracts-and-queue.md) | In Progress |
 | 8 | [Job management](./phase-08-job-management.md) | Pending |
 | 9 | [Python worker foundation](./phase-09-python-worker-foundation.md) | Pending |
 | 10 | [Processing pipeline](./phase-10-processing-pipeline.md) | Pending |
