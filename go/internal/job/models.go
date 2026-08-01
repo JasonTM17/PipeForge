@@ -67,7 +67,7 @@ type Job struct {
 	CompletedAt        *time.Time  `json:"completedAt,omitempty"`
 	FinishedAt         *time.Time  `json:"finishedAt,omitempty"`
 	LastErrorCode      *string     `json:"lastErrorCode,omitempty"`
-	LastErrorMessage   *string     `json:"lastErrorMessage,omitempty"`
+	LastErrorMessage   *string     `json:"-"`
 }
 
 type Attempt struct {

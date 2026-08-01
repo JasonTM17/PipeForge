@@ -105,7 +105,7 @@ func (r *Repository) RequestRetry(ctx context.Context, command RetryCommand) (Jo
 	if err := tx.QueryRow(ctx, `SELECT COALESCE(MAX(attempt_number), 0) + 1 FROM job_attempts WHERE job_id = $1`, item.ID).Scan(&attemptNumber); err != nil {
 		return Job{}, fmt.Errorf("allocate retry attempt: %w", err)
 	}
-	if attemptNumber > int(item.MaxAttempts) {
+	if attemptNumber > int(item.MaxAttempts) && item.State != StateDeadLettered {
 		return Job{}, fmt.Errorf("%w: maximum attempts reached", ErrJobState)
 	}
 	now := time.Now().UTC()

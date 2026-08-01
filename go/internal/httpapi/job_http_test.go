@@ -35,7 +35,7 @@ func TestJobHTTPLifecycleIdempotencyAndOwnership(t *testing.T) {
 	router := NewRouter(Dependencies{Identity: identityService, Job: jobService})
 
 	body := `{"operations":[{"type":"PROFILE_DATASET","config":{}},{"type":"CHECK_MISSING_VALUES","config":{"columns":["email"]}}]}`
-	created := performJobJSONRequest(router, http.MethodPost, "/v1/datasets/"+versionID.String()+"/jobs", body, ownerTokens.AccessToken, "job-key-1")
+	created := performJobJSONRequest(router, http.MethodPost, "/api/v1/datasets/"+versionID.String()+"/jobs", body, ownerTokens.AccessToken, "job-key-1")
 	if created.Code != http.StatusCreated {
 		t.Fatalf("job creation failed: %d %s", created.Code, created.Body.String())
 	}
@@ -43,7 +43,7 @@ func TestJobHTTPLifecycleIdempotencyAndOwnership(t *testing.T) {
 	if err := json.Unmarshal(created.Body.Bytes(), &first); err != nil {
 		t.Fatalf("decode created job: %v", err)
 	}
-	replayed := performJobJSONRequest(router, http.MethodPost, "/v1/datasets/"+versionID.String()+"/jobs", body, ownerTokens.AccessToken, "job-key-1")
+	replayed := performJobJSONRequest(router, http.MethodPost, "/api/v1/datasets/"+versionID.String()+"/jobs", body, ownerTokens.AccessToken, "job-key-1")
 	var replayedJob job.Job
 	if err := json.Unmarshal(replayed.Body.Bytes(), &replayedJob); err != nil {
 		t.Fatalf("decode replayed job: %v", err)
@@ -51,7 +51,7 @@ func TestJobHTTPLifecycleIdempotencyAndOwnership(t *testing.T) {
 	if replayed.Code != http.StatusOK || replayedJob.ID != first.ID {
 		t.Fatalf("idempotent replay failed: %d %s", replayed.Code, replayed.Body.String())
 	}
-	conflict := performJobJSONRequest(router, http.MethodPost, "/v1/datasets/"+versionID.String()+"/jobs", `{"operations":[{"type":"PROFILE_DATASET","config":{}}]}`, ownerTokens.AccessToken, "job-key-1")
+	conflict := performJobJSONRequest(router, http.MethodPost, "/api/v1/datasets/"+versionID.String()+"/jobs", `{"operations":[{"type":"PROFILE_DATASET","config":{}}]}`, ownerTokens.AccessToken, "job-key-1")
 	if conflict.Code != http.StatusConflict || !strings.Contains(conflict.Body.String(), `"IDEMPOTENCY_CONFLICT"`) {
 		t.Fatalf("idempotency conflict was not deterministic: %d %s", conflict.Code, conflict.Body.String())
 	}
@@ -60,13 +60,17 @@ func TestJobHTTPLifecycleIdempotencyAndOwnership(t *testing.T) {
 	if list.Code != http.StatusOK || !strings.Contains(list.Body.String(), `"total":1`) {
 		t.Fatalf("job list failed: %d %s", list.Code, list.Body.String())
 	}
-	otherGet := performJSONRequest(router, http.MethodGet, "/v1/jobs/"+first.ID.String(), "", otherTokens.AccessToken)
+	otherGet := performJSONRequest(router, http.MethodGet, "/api/v1/jobs/"+first.ID.String(), "", otherTokens.AccessToken)
 	if otherGet.Code != http.StatusForbidden {
 		t.Fatalf("cross-owner job access was not denied: %d %s", otherGet.Code, otherGet.Body.String())
 	}
 	invalid := performJobJSONRequest(router, http.MethodPost, "/v1/dataset-versions/"+versionID.String()+"/jobs", `{"operations":[{"type":"DROP_TABLE","config":{}}]}`, ownerTokens.AccessToken, "job-key-2")
 	if invalid.Code != http.StatusBadRequest {
 		t.Fatalf("invalid operation was not rejected: %d %s", invalid.Code, invalid.Body.String())
+	}
+	missingVersion := performJobJSONRequest(router, http.MethodPost, "/api/v1/datasets/"+uuid.NewString()+"/jobs", body, ownerTokens.AccessToken, "job-key-missing")
+	if missingVersion.Code != http.StatusNotFound {
+		t.Fatalf("missing dataset version was not mapped to 404: %d %s", missingVersion.Code, missingVersion.Body.String())
 	}
 }
 

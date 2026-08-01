@@ -40,7 +40,7 @@ func TestRepositoryCreatesAtomicIdempotentJobAndOutbox(t *testing.T) {
 
 	command := CreateCommand{
 		OwnerUserID: ownerID, ActorUserID: ownerID, DatasetVersionID: versionID,
-		Operations: []Operation{{Type: "PROFILE_DATASET", Config: map[string]any{}}},
+		Operations:     []Operation{{Type: "PROFILE_DATASET", Config: map[string]any{}}},
 		IdempotencyKey: "integration-job-1", MaxAttempts: 5, TraceID: "integration-trace",
 	}
 	created, replayed, err := repository.Create(ctx, command)
@@ -114,7 +114,7 @@ func TestRepositoryRollsBackWhenOutboxEnqueueFails(t *testing.T) {
 	}
 	_, _, err = repository.Create(ctx, CreateCommand{
 		OwnerUserID: ownerID, ActorUserID: ownerID, DatasetVersionID: versionID,
-		Operations: []Operation{{Type: "PROFILE_DATASET", Config: map[string]any{}}},
+		Operations:  []Operation{{Type: "PROFILE_DATASET", Config: map[string]any{}}},
 		MaxAttempts: 5, TraceID: "rollback-trace",
 	})
 	if err == nil {

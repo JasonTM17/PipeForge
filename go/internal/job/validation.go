@@ -9,6 +9,8 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+
+	"github.com/google/uuid"
 )
 
 const (
@@ -38,7 +40,7 @@ func ValidateCreateCommand(command CreateCommand) (string, error) {
 	if command.TraceID == "" {
 		return "", fmt.Errorf("%w: trace ID is required", ErrInvalidInput)
 	}
-	return Fingerprint(command.Operations)
+	return RequestFingerprint(command)
 }
 
 func ValidateOperations(operations []Operation) error {
@@ -47,7 +49,7 @@ func ValidateOperations(operations []Operation) error {
 	}
 	for index, operation := range operations {
 		operationType := strings.TrimSpace(operation.Type)
-		if operationType == "" || len(operationType) > MaxOperationTypeLen {
+		if operationType == "" || operationType != operation.Type || len(operationType) > MaxOperationTypeLen {
 			return fmt.Errorf("%w: operation %d has an invalid type", ErrInvalidInput, index)
 		}
 		if operation.Config == nil || len(operation.Config) > MaxConfigProperties {
@@ -59,14 +61,23 @@ func ValidateOperations(operations []Operation) error {
 				return fmt.Errorf("%w: PROFILE_DATASET config must be empty", ErrInvalidInput)
 			}
 		case "CHECK_MISSING_VALUES":
+			if err := validateConfigKeys(operation.Config, "columns"); err != nil {
+				return fmt.Errorf("%w: operation %d config: %v", ErrInvalidInput, index, err)
+			}
 			if _, err := requiredColumns(operation.Config, "columns"); err != nil {
 				return fmt.Errorf("%w: operation %d columns: %v", ErrInvalidInput, index, err)
 			}
 		case "CHECK_DUPLICATES":
+			if err := validateConfigKeys(operation.Config, "keyColumns"); err != nil {
+				return fmt.Errorf("%w: operation %d config: %v", ErrInvalidInput, index, err)
+			}
 			if _, err := requiredColumns(operation.Config, "keyColumns"); err != nil {
 				return fmt.Errorf("%w: operation %d keyColumns: %v", ErrInvalidInput, index, err)
 			}
 		case "DETECT_OUTLIERS":
+			if err := validateConfigKeys(operation.Config, "column", "method"); err != nil {
+				return fmt.Errorf("%w: operation %d config: %v", ErrInvalidInput, index, err)
+			}
 			column, ok := operation.Config["column"].(string)
 			if !ok || !validColumnName(column) {
 				return fmt.Errorf("%w: operation %d column is invalid", ErrInvalidInput, index)
@@ -86,6 +97,29 @@ func Fingerprint(operations []Operation) (string, error) {
 	canonical, err := CanonicalJSON(operations)
 	if err != nil {
 		return "", fmt.Errorf("%w: canonicalize operations: %v", ErrInvalidInput, err)
+	}
+	hash := sha256.Sum256(canonical)
+	return hex.EncodeToString(hash[:]), nil
+}
+
+func RequestFingerprint(command CreateCommand) (string, error) {
+	return fingerprintValue(struct {
+		DatasetVersionID uuid.UUID   `json:"datasetVersionId"`
+		Operations       []Operation `json:"operations"`
+		Priority         int16       `json:"priority"`
+		MaxAttempts      int16       `json:"maxAttempts"`
+	}{
+		DatasetVersionID: command.DatasetVersionID,
+		Operations:       command.Operations,
+		Priority:         command.Priority,
+		MaxAttempts:      command.MaxAttempts,
+	})
+}
+
+func fingerprintValue(value any) (string, error) {
+	canonical, err := CanonicalJSON(value)
+	if err != nil {
+		return "", fmt.Errorf("%w: canonicalize request: %v", ErrInvalidInput, err)
 	}
 	hash := sha256.Sum256(canonical)
 	return hex.EncodeToString(hash[:]), nil
@@ -187,6 +221,19 @@ func requiredColumns(config map[string]any, key string) ([]string, error) {
 		result[index] = column
 	}
 	return result, nil
+}
+
+func validateConfigKeys(config map[string]any, allowed ...string) error {
+	allowedKeys := make(map[string]struct{}, len(allowed))
+	for _, key := range allowed {
+		allowedKeys[key] = struct{}{}
+	}
+	for key := range config {
+		if _, ok := allowedKeys[key]; !ok {
+			return fmt.Errorf("unsupported config field %q", key)
+		}
+	}
+	return nil
 }
 
 func validColumnName(value string) bool {
