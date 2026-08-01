@@ -1,7 +1,7 @@
 ---
 phase: 8
 title: Job management
-status: in-progress
+status: completed
 priority: P1
 effort: 5d
 dependencies:
@@ -46,11 +46,11 @@ Implement processing jobs, attempts, controlled lifecycle transitions, idempoten
 
 ## Success Criteria
 
-- [ ] Valid job request creates one stable resource for repeated idempotency key/fingerprint.
-- [ ] Conflicting idempotency reuse returns a deterministic conflict.
-- [ ] Invalid transitions and terminal updates are rejected without partial state changes.
-- [ ] Scheduler does not starve an older eligible user behind a noisy user within the documented fairness model.
-- [ ] Job API never exposes stack traces or arbitrary state mutation.
+- [x] Valid job request creates one stable resource for repeated idempotency key/fingerprint.
+- [x] Conflicting idempotency reuse returns a deterministic conflict.
+- [x] Invalid transitions and terminal updates are rejected without partial state changes.
+- [x] Scheduler does not starve an older eligible user behind a noisy user within the documented fairness model.
+- [x] Job API never exposes stack traces or arbitrary state mutation.
 
 ## Validation
 

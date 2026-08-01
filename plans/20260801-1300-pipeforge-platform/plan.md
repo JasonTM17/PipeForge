@@ -76,7 +76,7 @@ PipeForge is a from-scratch monorepo for distributed dataset processing. The Go 
 | 5 | [Dataset metadata](./phase-05-dataset-metadata.md) | Completed |
 | 6 | [Multipart upload](./phase-06-multipart-upload.md) | Completed |
 | 7 | [Contracts and queue](./phase-07-contracts-and-queue.md) | Completed |
-| 8 | [Job management](./phase-08-job-management.md) | In Progress |
+| 8 | [Job management](./phase-08-job-management.md) | Completed |
 | 9 | [Python worker foundation](./phase-09-python-worker-foundation.md) | Pending |
 | 10 | [Processing pipeline](./phase-10-processing-pipeline.md) | Pending |
 | 11 | [Profiling](./phase-11-profiling.md) | Pending |
