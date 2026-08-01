@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/JasonTM17/PipeForge/go/internal/dataset"
+	"github.com/JasonTM17/PipeForge/go/internal/dlq"
 	"github.com/JasonTM17/PipeForge/go/internal/identity"
 	"github.com/JasonTM17/PipeForge/go/internal/job"
 	"github.com/JasonTM17/PipeForge/go/internal/multipart"
@@ -27,6 +28,7 @@ type Dependencies struct {
 	Job       *job.Service
 	Quality   *quality.Service
 	Result    *result.Service
+	DLQ       *dlq.Service
 }
 
 func NewRouter(deps Dependencies) http.Handler {
@@ -63,6 +65,9 @@ func NewRouter(deps Dependencies) http.Handler {
 		}
 		if deps.Result != nil {
 			registerResultRoutes(router, deps.Identity, deps.Result)
+		}
+		if deps.DLQ != nil {
+			registerDLQRoutes(router, deps.Identity, deps.DLQ)
 		}
 	}
 	return router

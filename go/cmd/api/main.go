@@ -10,6 +10,7 @@ import (
 	"syscall"
 
 	"github.com/JasonTM17/PipeForge/go/internal/dataset"
+	"github.com/JasonTM17/PipeForge/go/internal/dlq"
 	"github.com/JasonTM17/PipeForge/go/internal/httpapi"
 	"github.com/JasonTM17/PipeForge/go/internal/identity"
 	"github.com/JasonTM17/PipeForge/go/internal/job"
@@ -98,6 +99,14 @@ func run() error {
 	if err != nil {
 		return err
 	}
+	dlqRepository, err := dlq.NewRepository(pool, outboxRepository)
+	if err != nil {
+		return err
+	}
+	dlqService, err := dlq.NewService(dlqRepository)
+	if err != nil {
+		return err
+	}
 
 	metrics := observability.NewMetrics()
 	router := httpapi.NewRouter(httpapi.Dependencies{
@@ -109,6 +118,7 @@ func run() error {
 		Job:       jobService,
 		Quality:   qualityService,
 		Result:    resultService,
+		DLQ:       dlqService,
 		Readiness: func(ctx context.Context) error {
 			if err := pool.Ping(ctx); err != nil {
 				return err
