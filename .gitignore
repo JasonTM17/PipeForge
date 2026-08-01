@@ -1,0 +1,50 @@
+# Local agent/tooling state
+.claude/
+.codex/
+
+# Environment and secrets
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+credentials.json
+secrets.json
+
+# Go build and test output
+/bin/
+/go/bin/
+*.test
+coverage.out
+coverage.html
+
+# Python build, cache, and virtual environments
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.pyright/
+.ruff_cache/
+.venv/
+venv/
+build/
+dist/
+*.egg-info/
+.coverage
+htmlcov/
+
+# Local runtime data and logs
+/local-data/
+/tmp/
+*.log
+*.sqlite
+
+# OS/editor noise
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/*
+!.vscode/settings.json
+!.vscode/extensions.json
+
