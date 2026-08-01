@@ -43,7 +43,9 @@ func NewMinIO(config MinIOConfig) (*MinIOStore, error) {
 	}
 	presignClient := core.Client
 	if strings.TrimSpace(config.PublicEndpoint) != "" && strings.TrimSpace(config.PublicEndpoint) != strings.TrimSpace(config.Endpoint) {
-		publicCore, publicErr := minio.NewCore(config.PublicEndpoint, options)
+		presignOptions := *options
+		presignOptions.Region = "us-east-1"
+		publicCore, publicErr := minio.NewCore(config.PublicEndpoint, &presignOptions)
 		if publicErr != nil {
 			return nil, fmt.Errorf("create MinIO presign client: %w", publicErr)
 		}
