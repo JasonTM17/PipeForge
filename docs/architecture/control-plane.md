@@ -26,6 +26,7 @@ flowchart TB
 - Result consumers insert the message ID into an inbox table and apply the state/artifact transition in the same transaction. A duplicate message is a no-op.
 - A result is accepted only when its job, attempt, lease, and worker identity match the current authoritative records.
 - Resource ownership and scope checks occur in domain services, not only in HTTP handlers.
+- Dataset version uploads stream through the Go service into MinIO; PostgreSQL records a version only after object size, checksum, and existence are verified.
 - Internal errors and diagnostic references stay server-side; public problem responses expose stable codes and request IDs.
 
 ## Runtime processes
@@ -34,4 +35,3 @@ flowchart TB
 - `go/cmd/scheduler`: outbox dispatch, fair job selection, lease expiry, retry scheduling, and upload cleanup loops.
 - `go/cmd/result-consumer`: RabbitMQ result/event consumer with manual acknowledgements.
 - `go/cmd/pipectl`: public API client; never connects to data stores directly.
-

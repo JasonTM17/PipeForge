@@ -32,6 +32,7 @@ This document is the compact, repository-facing summary of the attached PipeForg
 - Long-running work crosses the Go/Python boundary through versioned asynchronous messages.
 - At-least-once delivery is expected. Consumers use inbox/idempotency and attempt/lease validation.
 - Raw dataset versions are immutable. Artifacts are attempt-scoped until Go accepts a result.
+- Dataset metadata is authoritative in PostgreSQL; raw bytes are private MinIO objects addressed only by server-generated keys.
 - Retryable failures are bounded and jittered; permanent failures do not loop; dead letters are inspectable and replayable only through authorization.
 - Public APIs expose controlled lifecycle commands, not unrestricted status mutation.
 
@@ -46,4 +47,3 @@ Each logical change gets its own Conventional Commit. Before committing:
 5. Record the commit hash, message, changed components, commands, results, and next slice in the task report.
 
 Do not create an empty commit merely to match a numbered list. If a baseline item is not real progress, combine it with the smallest adjacent behavior and explain why.
-

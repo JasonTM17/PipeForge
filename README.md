@@ -2,7 +2,7 @@
 
 PipeForge is a production-oriented distributed data-processing platform for uploading datasets, scheduling analysis jobs, processing data with Python workers, and accepting results through a reliable Go control plane.
 
-> Status: Phases 1–4 are implemented and verified; dataset, job, worker, and delivery behavior is being added incrementally. Commands marked planned are not presented as working until their phase is implemented and tested.
+> Status: Phases 1–5 are implemented and verified; multipart uploads, jobs, workers, and delivery behavior are being added incrementally. Commands marked planned are not presented as working until their phase is implemented and tested.
 
 ## Architecture
 
@@ -64,7 +64,7 @@ make migrate
 make dev
 ```
 
-The verified identity endpoints are available under `/v1`: registration, login, refresh, logout, and owner-scoped API-key management. The API returns a refresh token only at authentication/rotation time; API-key plaintext is returned only at creation.
+The verified identity endpoints are available under `/v1`: registration, login, refresh, logout, and owner-scoped API-key management. Dataset registration, owner-scoped listing/detail/deletion, and streamed CSV/JSONL/Parquet version uploads are also available. Uploads require `X-Filename`, may include `X-Checksum-SHA256`, default to a 64 MiB limit, and store raw bytes under server-generated MinIO keys. The API returns a refresh token only at authentication/rotation time; API-key plaintext is returned only at creation.
 
 You can inspect the plan and validate the worktree at any time:
 

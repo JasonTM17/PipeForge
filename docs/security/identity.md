@@ -26,6 +26,7 @@ Current scopes are `datasets:read`, `datasets:write`, `jobs:read`, `jobs:write`,
 - `POST /v1/auth/refresh` rotates refresh tokens. A reused token returns `401` and invalidates its family.
 - `POST /v1/auth/logout` revokes the refresh-token family and writes an audit event.
 - API-key management requires a valid bearer token or API key and enforces owner boundaries.
+- Dataset routes require `datasets:read` or `datasets:write`; non-admin principals can access only their own datasets. Raw object keys are omitted from public version responses.
 - Authentication failures use a stable `UNAUTHENTICATED` problem response with a request ID. Credential values and internal errors are not returned.
 
 ## Operational requirements
