@@ -1,0 +1,57 @@
+[build-system]
+requires = ["hatchling>=1.25,<2"]
+build-backend = "hatchling.build"
+
+[project]
+name = "pipeforge-worker"
+version = "0.1.0"
+description = "Typed Python data-plane worker for PipeForge"
+readme = "README.md"
+requires-python = ">=3.12,<3.15"
+dependencies = [
+  "aio-pika>=9.5,<10",
+  "jsonschema>=4.23,<5",
+  "minio>=7.2,<8",
+  "prometheus-client>=0.21,<1",
+  "pydantic>=2.9,<3",
+  "pydantic-settings>=2.6,<3",
+  "referencing>=0.35,<1",
+]
+
+[project.optional-dependencies]
+dev = [
+  "mypy>=1.13,<2",
+  "pytest>=8.3,<9",
+  "pytest-asyncio>=0.24,<1",
+  "ruff>=0.8,<1",
+]
+
+[project.scripts]
+pipeforge-worker = "pipeforge_worker.__main__:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/pipeforge_worker"]
+
+[tool.pytest.ini_options]
+addopts = "-ra"
+asyncio_mode = "auto"
+pythonpath = ["src"]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP", "RUF"]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+warn_unused_ignores = true
+warn_redundant_casts = true
+ignore_missing_imports = true
