@@ -78,6 +78,7 @@ services:
     environment:
       MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY:?MINIO_ACCESS_KEY is required}
       MINIO_SECRET_KEY: ${MINIO_SECRET_KEY:?MINIO_SECRET_KEY is required}
+      MINIO_DATASET_BUCKET: ${MINIO_DATASET_BUCKET:-datasets}
     volumes:
       - ./infrastructure/minio/init.sh:/opt/pipeforge/init.sh:ro
     entrypoint: ["/bin/sh", "/opt/pipeforge/init.sh"]
@@ -96,6 +97,12 @@ services:
       JWT_SIGNING_KEY: ${JWT_SIGNING_KEY:?JWT_SIGNING_KEY is required}
       PIPEFORGE_ACCESS_TOKEN_TTL: ${PIPEFORGE_ACCESS_TOKEN_TTL:-15m}
       PIPEFORGE_REFRESH_TOKEN_TTL: ${PIPEFORGE_REFRESH_TOKEN_TTL:-720h}
+      MINIO_ENDPOINT: minio:9000
+      MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY:?MINIO_ACCESS_KEY is required}
+      MINIO_SECRET_KEY: ${MINIO_SECRET_KEY:?MINIO_SECRET_KEY is required}
+      MINIO_SECURE: ${MINIO_SECURE:-false}
+      MINIO_DATASET_BUCKET: ${MINIO_DATASET_BUCKET:-datasets}
+      PIPEFORGE_MAX_UPLOAD_BYTES: ${PIPEFORGE_MAX_UPLOAD_BYTES:-67108864}
       POSTGRES_HOST: postgres
       POSTGRES_PORT: 5432
       POSTGRES_DATABASE: ${POSTGRES_DATABASE:?POSTGRES_DATABASE is required}
@@ -106,6 +113,8 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+      minio-init:
+        condition: service_completed_successfully
     healthcheck:
       test: ["CMD", "wget", "-q", "-O", "-", "http://localhost:8080/health/live"]
       interval: 5s

@@ -9,11 +9,13 @@ import (
 	"os/signal"
 	"syscall"
 
+	"github.com/JasonTM17/PipeForge/go/internal/dataset"
 	"github.com/JasonTM17/PipeForge/go/internal/httpapi"
 	"github.com/JasonTM17/PipeForge/go/internal/identity"
 	"github.com/JasonTM17/PipeForge/go/internal/observability"
 	"github.com/JasonTM17/PipeForge/go/internal/platform/config"
 	"github.com/JasonTM17/PipeForge/go/internal/platform/database"
+	"github.com/JasonTM17/PipeForge/go/internal/storage"
 )
 
 func main() {
@@ -43,12 +45,27 @@ func run() error {
 	if err != nil {
 		return err
 	}
+	objectStore, err := storage.NewMinIO(storage.MinIOConfig{
+		Endpoint:  cfg.MinIOEndpoint,
+		AccessKey: cfg.MinIOAccessKey,
+		SecretKey: cfg.MinIOSecretKey,
+		Secure:    cfg.MinIOSecure,
+		Bucket:    cfg.DatasetBucket,
+	})
+	if err != nil {
+		return err
+	}
+	datasetService, err := dataset.NewService(dataset.NewRepository(pool), objectStore, cfg.MaxUploadBytes)
+	if err != nil {
+		return err
+	}
 
 	metrics := observability.NewMetrics()
 	router := httpapi.NewRouter(httpapi.Dependencies{
 		Logger:   logger,
 		Metrics:  metrics,
 		Identity: identityService,
+		Dataset:  datasetService,
 		Readiness: func(ctx context.Context) error {
 			return pool.Ping(ctx)
 		},
