@@ -47,3 +47,13 @@ class PermanentMessageError(RuntimeError):
 
 class TransientMessageError(RuntimeError):
     """A bounded transport/storage failure that must be durably classified."""
+
+
+async def settle_delivery(delivery: Delivery, handler: MessageHandler) -> None:
+    """Run a handler before acknowledging; rejection always routes to the broker DLX."""
+
+    disposition = await handler(delivery)
+    if disposition is MessageDisposition.ACK:
+        await delivery.ack()
+    else:
+        await delivery.reject(requeue=False)

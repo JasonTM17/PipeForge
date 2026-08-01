@@ -79,6 +79,14 @@ class Settings(BaseSettings):
         default="processing.jobs",
         validation_alias=AliasChoices("PIPEFORGE_WORKER_QUEUE", "WORKER_QUEUE"),
     )
+    dead_letter_exchange: str = Field(
+        default="pipeforge.dead-letter",
+        validation_alias=AliasChoices("PIPEFORGE_WORKER_DLX", "WORKER_DLX"),
+    )
+    dead_letter_routing_key: str = Field(
+        default="processing.jobs.dlq",
+        validation_alias=AliasChoices("PIPEFORGE_WORKER_DLX_ROUTING_KEY", "WORKER_DLX_ROUTING_KEY"),
+    )
     commands_exchange: str = Field(
         default="pipeforge.commands",
         validation_alias=AliasChoices(
@@ -177,6 +185,8 @@ class Settings(BaseSettings):
         "software_version",
         "broker_url",
         "broker_queue",
+        "dead_letter_exchange",
+        "dead_letter_routing_key",
         "commands_exchange",
         "events_exchange",
         "minio_endpoint",

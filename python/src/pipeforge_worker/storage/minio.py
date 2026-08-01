@@ -75,6 +75,10 @@ class MinioObjectStore(ObjectStore):
     def delete(self, key: str) -> None:
         self._client.remove_object(self._bucket, _safe_object_key(key))
 
+    def ping(self) -> None:
+        if not self._client.bucket_exists(self._bucket):
+            raise RuntimeError(f"object-storage bucket does not exist: {self._bucket}")
+
     def close(self) -> None:
         return
 

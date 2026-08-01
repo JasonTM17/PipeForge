@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from collections.abc import Mapping
 from typing import Any, cast
@@ -13,9 +14,9 @@ from pipeforge_worker.contracts.envelope import Envelope
 from pipeforge_worker.messaging.protocols import (
     Consumer,
     Delivery,
-    MessageDisposition,
     MessageHandler,
     Publisher,
+    settle_delivery,
 )
 
 
@@ -92,16 +93,19 @@ class RabbitConsumer(Consumer):
         url: str,
         queue_name: str,
         prefetch_count: int,
+        queue_arguments: Mapping[str, object] | None = None,
         reconnect_delay_seconds: float = 2.0,
     ) -> None:
         self._url = url
         self._queue_name = queue_name
         self._prefetch_count = prefetch_count
+        self._queue_arguments = dict(queue_arguments or {})
         self._reconnect_delay_seconds = reconnect_delay_seconds
         self._connection: Any = None
         self._channel: Any = None
         self._queue: Any = None
         self._consumer_tag: str | None = None
+        self._in_flight: set[asyncio.Task[None]] = set()
         self._logger = logging.getLogger(__name__)
 
     async def start(self, handler: MessageHandler) -> None:
@@ -111,7 +115,11 @@ class RabbitConsumer(Consumer):
         )
         self._channel = await self._connection.channel()
         await self._channel.set_qos(prefetch_count=self._prefetch_count)
-        self._queue = await self._channel.declare_queue(self._queue_name, durable=True)
+        self._queue = await self._channel.declare_queue(
+            self._queue_name,
+            durable=True,
+            arguments=cast(Any, self._queue_arguments),
+        )
         self._consumer_tag = await self._queue.consume(
             lambda message: self._settle(message, handler), no_ack=False
         )
@@ -119,22 +127,27 @@ class RabbitConsumer(Consumer):
 
     async def _settle(self, message: Any, handler: MessageHandler) -> None:
         delivery = RabbitDelivery(message)
+        task = asyncio.current_task()
+        if task is not None:
+            self._in_flight.add(task)
         try:
-            disposition = await handler(delivery)
-            if disposition is MessageDisposition.ACK:
-                await delivery.ack()
-            else:
-                await delivery.reject(requeue=False)
+            await settle_delivery(delivery, handler)
         except Exception:
             self._logger.exception("worker message handling failed; sending to dead-letter path")
             await delivery.reject(requeue=False)
+        finally:
+            if task is not None:
+                self._in_flight.discard(task)
 
     async def stop(self) -> None:
         if self._queue is not None and self._consumer_tag is not None:
             await self._queue.cancel(self._consumer_tag)
+        if self._in_flight:
+            await asyncio.gather(*tuple(self._in_flight), return_exceptions=True)
         if self._connection is not None and not self._connection.is_closed:
             await self._connection.close()
         self._connection = None
         self._channel = None
         self._queue = None
         self._consumer_tag = None
+        self._in_flight.clear()
