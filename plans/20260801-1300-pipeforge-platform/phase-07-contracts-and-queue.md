@@ -1,7 +1,7 @@
 ---
 phase: 7
 title: Contracts and queue
-status: in-progress
+status: completed
 priority: P1
 effort: 4d
 dependencies:

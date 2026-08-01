@@ -1,10 +1,13 @@
 ---
 phase: 8
-title: "Job management"
-status: pending
+title: Job management
+status: in-progress
 priority: P1
-effort: "5d"
-dependencies: [4, 5, 7]
+effort: 5d
+dependencies:
+  - 4
+  - 5
+  - 7
 ---
 
 # Phase 8: Job management
@@ -27,7 +30,7 @@ Implement processing jobs, attempts, controlled lifecycle transitions, idempoten
 ## Related Code Files
 
 - Create: `go/internal/job/`, `go/internal/scheduler/`
-- Create: `go/migrations/000006_jobs.sql`
+- Create: `go/migrations/000007_jobs.sql`
 - Modify: `go/internal/outbox/`, dataset-version job handlers, OpenAPI
 - Create: job state-machine, authorization, idempotency, fairness tests
 - Modify: contracts job-request schema and docs
@@ -72,4 +75,3 @@ Phase 9 implements the typed Python worker that consumes the job request contrac
 ## Unresolved Questions
 
 - None blocking; initial fairness uses weighted round-robin by owner plus age, documented and tested before optimizing.
-
