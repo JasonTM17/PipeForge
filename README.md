@@ -2,7 +2,7 @@
 
 PipeForge is a production-oriented distributed data-processing platform for uploading datasets, scheduling analysis jobs, processing data with Python workers, and accepting results through a reliable Go control plane.
 
-> Status: foundation phase. The repository skeleton and architecture plan are present; service behavior is being delivered incrementally. Commands marked planned are not presented as working until their phase is implemented and tested.
+> Status: Phases 1–4 are implemented and verified; dataset, job, worker, and delivery behavior is being added incrementally. Commands marked planned are not presented as working until their phase is implemented and tested.
 
 ## Architecture
 
@@ -14,6 +14,8 @@ The system is intentionally split into two planes:
 - RabbitMQ carries versioned asynchronous commands/events. MinIO stores immutable raw dataset versions and attempt-scoped artifacts.
 
 See [the system overview](docs/architecture/system-overview.md), [control-plane boundary](docs/architecture/control-plane.md), and [data-plane boundary](docs/architecture/data-plane.md).
+
+Identity endpoints and credential handling are documented in [the API contract](docs/api/openapi.yaml) and [the identity security notes](docs/security/identity.md).
 
 ## Repository layout
 
@@ -61,6 +63,8 @@ Apply the foundation migration after bootstrapping dependencies, then start the 
 make migrate
 make dev
 ```
+
+The verified identity endpoints are available under `/v1`: registration, login, refresh, logout, and owner-scoped API-key management. The API returns a refresh token only at authentication/rotation time; API-key plaintext is returned only at creation.
 
 You can inspect the plan and validate the worktree at any time:
 
