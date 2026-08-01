@@ -135,3 +135,20 @@ func TestValidateOperationsAcceptsQualitySnapshotAndRejectsCustomExpression(t *t
 		t.Fatalf("expected custom expression to fail closed, got %v", err)
 	}
 }
+
+func TestValidateOperationsAcceptsBoundedAnomalyConfig(t *testing.T) {
+	valid := []Operation{{
+		Type: "DETECT_OUTLIERS",
+		Config: map[string]any{
+			"column": "amount", "method": "MODIFIED_Z_SCORE", "threshold": 3.5,
+			"nullPolicy": "FAIL", "minimumSampleSize": 5, "sampleOutputLimit": 64,
+		},
+	}}
+	if err := ValidateOperations(valid); err != nil {
+		t.Fatalf("expected bounded anomaly config to pass: %v", err)
+	}
+	unknown := []Operation{{Type: "DETECT_OUTLIERS", Config: map[string]any{"column": "amount", "method": "IQR", "expression": "x"}}}
+	if err := ValidateOperations(unknown); !errors.Is(err, ErrInvalidInput) {
+		t.Fatalf("expected unknown anomaly field to fail: %v", err)
+	}
+}

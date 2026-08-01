@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"math"
 	"regexp"
 	"sort"
 	"strings"
@@ -76,16 +77,8 @@ func ValidateOperations(operations []Operation) error {
 				return fmt.Errorf("%w: operation %d keyColumns: %v", ErrInvalidInput, index, err)
 			}
 		case "DETECT_OUTLIERS":
-			if err := validateConfigKeys(operation.Config, "column", "method"); err != nil {
-				return fmt.Errorf("%w: operation %d config: %v", ErrInvalidInput, index, err)
-			}
-			column, ok := operation.Config["column"].(string)
-			if !ok || !validColumnName(column) {
-				return fmt.Errorf("%w: operation %d column is invalid", ErrInvalidInput, index)
-			}
-			method, ok := operation.Config["method"].(string)
-			if !ok || (method != "IQR" && method != "Z_SCORE") {
-				return fmt.Errorf("%w: operation %d method must be IQR or Z_SCORE", ErrInvalidInput, index)
+			if err := validateOutlierConfig(operation.Config); err != nil {
+				return fmt.Errorf("%w: operation %d outlier config: %v", ErrInvalidInput, index, err)
 			}
 		case "VALIDATE_QUALITY":
 			if err := validateConfigKeys(operation.Config, "rules"); err != nil {
@@ -242,6 +235,92 @@ func validateConfigKeys(config map[string]any, allowed ...string) error {
 		}
 	}
 	return nil
+}
+
+func validateOutlierConfig(config map[string]any) error {
+	if err := validateConfigKeys(config, "column", "method", "threshold", "nullPolicy", "minimumSampleSize", "sampleOutputLimit"); err != nil {
+		return err
+	}
+	column, ok := config["column"].(string)
+	if !ok || !validColumnName(column) {
+		return fmt.Errorf("column is invalid")
+	}
+	method, ok := config["method"].(string)
+	if !ok || (method != "IQR" && method != "Z_SCORE" && method != "MODIFIED_Z_SCORE") {
+		return fmt.Errorf("method is invalid")
+	}
+	if value, present := config["threshold"]; present {
+		threshold, ok := finiteNumber(value)
+		if !ok || threshold < 0.0001 || threshold > 1_000 {
+			return fmt.Errorf("threshold is outside the supported bound")
+		}
+	}
+	if value, present := config["nullPolicy"]; present {
+		policy, ok := value.(string)
+		if !ok || (policy != "SKIP" && policy != "FAIL") {
+			return fmt.Errorf("nullPolicy is invalid")
+		}
+	}
+	if value, present := config["minimumSampleSize"]; present {
+		minimum, ok := boundedInteger(value)
+		if !ok || minimum < 3 || minimum > 1_000_000 {
+			return fmt.Errorf("minimumSampleSize is outside the supported bound")
+		}
+	}
+	if value, present := config["sampleOutputLimit"]; present {
+		limit, ok := boundedInteger(value)
+		if !ok || limit < 0 || limit > 128 {
+			return fmt.Errorf("sampleOutputLimit is outside the supported bound")
+		}
+	}
+	return nil
+}
+
+func finiteNumber(value any) (float64, bool) {
+	var number float64
+	switch typed := value.(type) {
+	case int:
+		number = float64(typed)
+	case int8:
+		number = float64(typed)
+	case int16:
+		number = float64(typed)
+	case int32:
+		number = float64(typed)
+	case int64:
+		number = float64(typed)
+	case uint:
+		number = float64(typed)
+	case uint8:
+		number = float64(typed)
+	case uint16:
+		number = float64(typed)
+	case uint32:
+		number = float64(typed)
+	case uint64:
+		number = float64(typed)
+	case float32:
+		number = float64(typed)
+	case float64:
+		number = typed
+	case json.Number:
+		parsed, err := typed.Float64()
+		if err != nil {
+			return 0, false
+		}
+		number = parsed
+	default:
+		return 0, false
+	}
+	return number, !math.IsNaN(number) && !math.IsInf(number, 0)
+}
+
+func boundedInteger(value any) (int64, bool) {
+	number, ok := finiteNumber(value)
+	if !ok || number != math.Trunc(number) || number < math.MinInt64 || number > math.MaxInt64 {
+		return 0, false
+	}
+	return int64(number), true
 }
 
 func validColumnName(value string) bool {
