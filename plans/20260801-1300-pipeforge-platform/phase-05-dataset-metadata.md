@@ -1,7 +1,7 @@
 ---
 phase: 5
 title: Dataset metadata
-status: in-progress
+status: completed
 priority: P1
 effort: 4d
 dependencies:
