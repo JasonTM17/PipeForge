@@ -12,6 +12,7 @@ import (
 	"github.com/JasonTM17/PipeForge/go/internal/job"
 	"github.com/JasonTM17/PipeForge/go/internal/multipart"
 	"github.com/JasonTM17/PipeForge/go/internal/observability"
+	"github.com/JasonTM17/PipeForge/go/internal/quality"
 	"github.com/go-chi/chi/v5"
 )
 
@@ -23,6 +24,7 @@ type Dependencies struct {
 	Dataset   *dataset.Service
 	Multipart *multipart.Service
 	Job       *job.Service
+	Quality   *quality.Service
 }
 
 func NewRouter(deps Dependencies) http.Handler {
@@ -53,6 +55,9 @@ func NewRouter(deps Dependencies) http.Handler {
 		}
 		if deps.Job != nil {
 			registerJobRoutes(router, deps.Identity, deps.Job)
+		}
+		if deps.Quality != nil {
+			registerQualityRoutes(router, deps.Identity, deps.Quality)
 		}
 	}
 	return router
