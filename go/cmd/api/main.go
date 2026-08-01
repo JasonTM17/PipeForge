@@ -19,6 +19,7 @@ import (
 	"github.com/JasonTM17/PipeForge/go/internal/platform/config"
 	"github.com/JasonTM17/PipeForge/go/internal/platform/database"
 	"github.com/JasonTM17/PipeForge/go/internal/quality"
+	"github.com/JasonTM17/PipeForge/go/internal/result"
 	"github.com/JasonTM17/PipeForge/go/internal/storage"
 )
 
@@ -89,6 +90,14 @@ func run() error {
 	if err != nil {
 		return err
 	}
+	resultRepository, err := result.NewRepository(pool)
+	if err != nil {
+		return err
+	}
+	resultService, err := result.NewService(resultRepository, objectStore)
+	if err != nil {
+		return err
+	}
 
 	metrics := observability.NewMetrics()
 	router := httpapi.NewRouter(httpapi.Dependencies{
@@ -99,6 +108,7 @@ func run() error {
 		Multipart: multipartService,
 		Job:       jobService,
 		Quality:   qualityService,
+		Result:    resultService,
 		Readiness: func(ctx context.Context) error {
 			if err := pool.Ping(ctx); err != nil {
 				return err
