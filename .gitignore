@@ -39,6 +39,7 @@ htmlcov/
 # Local runtime data and logs
 /local-data/
 /tmp/
+/plans/templates/
 *.log
 *.sqlite
 

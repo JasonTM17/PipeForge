@@ -1,15 +1,25 @@
 ---
-title: "PipeForge production-oriented distributed data platform"
-description: "Build PipeForge as a production-oriented Go control plane and Python data plane with durable messaging, object storage, reliable job execution, and end-to-end verification."
+title: PipeForge production-oriented distributed data platform
+description: >-
+  Build PipeForge as a production-oriented Go control plane and Python data
+  plane with durable messaging, object storage, reliable job execution, and
+  end-to-end verification.
 status: pending
 priority: P1
-effort: "10w"
-branch: "main"
-tags: [feature, backend, database, api, auth, infra, critical]
+effort: 10w
+branch: main
+tags:
+  - feature
+  - backend
+  - database
+  - api
+  - auth
+  - infra
+  - critical
 blockedBy: []
 blocks: []
-created: "2026-08-01T06:00:24.273Z"
-createdBy: "ck:plan"
+created: '2026-08-01T06:00:24.273Z'
+createdBy: 'ck:plan'
 source: skill
 ---
 
@@ -59,7 +69,7 @@ PipeForge is a from-scratch monorepo for distributed dataset processing. The Go 
 
 | Phase | Name | Status |
 |-------|------|--------|
-| 1 | [Foundation](./phase-01-foundation.md) | Pending |
+| 1 | [Foundation](./phase-01-foundation.md) | Completed |
 | 2 | [Infrastructure](./phase-02-infrastructure.md) | Pending |
 | 3 | [Go API foundation](./phase-03-go-api-foundation.md) | Pending |
 | 4 | [Identity](./phase-04-identity.md) | Pending |
