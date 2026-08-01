@@ -20,7 +20,7 @@ func TestLoadUsesDefaults(t *testing.T) {
 	if cfg.AccessTokenTTL != defaultAccessTokenTTL || cfg.RefreshTokenTTL != defaultRefreshTokenTTL || cfg.JWTSigningKey == "" {
 		t.Fatalf("unexpected identity defaults: %+v", cfg)
 	}
-	if cfg.MinIOEndpoint == "" || cfg.MinIOPublicEndpoint == "" || cfg.MinIOAccessKey == "" || cfg.MinIOSecretKey == "" || cfg.DatasetBucket != defaultDatasetBucket || cfg.MaxUploadBytes != defaultMaxUploadBytes || cfg.MultipartPartSize != defaultMultipartPartSize || cfg.MultipartMaxParts != defaultMultipartMaxParts || cfg.MultipartMaxBytes != defaultMultipartMaxBytes || cfg.MultipartSessionTTL != defaultMultipartSessionTTL || cfg.MultipartURLTTL != defaultMultipartURLTTL || cfg.MultipartCompletionGrace != defaultMultipartCompletionGrace || cfg.MultipartCleanupLimit != defaultMultipartCleanupLimit {
+	if cfg.MinIOEndpoint == "" || cfg.MinIOPublicEndpoint == "" || cfg.MinIOAccessKey == "" || cfg.MinIOSecretKey == "" || cfg.RabbitMQURL != defaultDevelopmentRabbitMQURL || cfg.DatasetBucket != defaultDatasetBucket || cfg.MaxUploadBytes != defaultMaxUploadBytes || cfg.MultipartPartSize != defaultMultipartPartSize || cfg.MultipartMaxParts != defaultMultipartMaxParts || cfg.MultipartMaxBytes != defaultMultipartMaxBytes || cfg.MultipartSessionTTL != defaultMultipartSessionTTL || cfg.MultipartURLTTL != defaultMultipartURLTTL || cfg.MultipartCompletionGrace != defaultMultipartCompletionGrace || cfg.MultipartCleanupLimit != defaultMultipartCleanupLimit {
 		t.Fatalf("unexpected storage defaults: %+v", cfg)
 	}
 }
@@ -42,6 +42,7 @@ func TestLoadParsesOverrides(t *testing.T) {
 		"MINIO_DATASET_BUCKET":                 "custom-datasets",
 		"MINIO_SECURE":                         "true",
 		"MINIO_PUBLIC_SECURE":                  "false",
+		"RABBITMQ_URL":                         "amqp://user:pass@rabbitmq:5672/",
 		"PIPEFORGE_MAX_UPLOAD_BYTES":           "1048576",
 		"PIPEFORGE_MULTIPART_PART_SIZE":        "5242880",
 		"PIPEFORGE_MULTIPART_MAX_PARTS":        "1000",
@@ -55,7 +56,7 @@ func TestLoadParsesOverrides(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Load returned error: %v", err)
 	}
-	if cfg.DatabasePort != 55433 || cfg.DatabaseMaxConns != 4 || cfg.ShutdownTimeout != 3*time.Second || cfg.AccessTokenTTL != 10*time.Minute || cfg.RefreshTokenTTL != 48*time.Hour || cfg.MinIOEndpoint != "minio:9000" || cfg.MinIOPublicEndpoint != "localhost:59010" || !cfg.MinIOSecure || cfg.MinIOPublicSecure || cfg.MaxUploadBytes != 1048576 || cfg.MultipartPartSize != 5242880 || cfg.MultipartMaxParts != 1000 || cfg.MultipartMaxBytes != 5242880000 || cfg.MultipartSessionTTL != 12*time.Hour || cfg.MultipartURLTTL != 10*time.Minute || cfg.MultipartCompletionGrace != 45*time.Minute || cfg.MultipartCleanupLimit != 25 {
+	if cfg.DatabasePort != 55433 || cfg.DatabaseMaxConns != 4 || cfg.ShutdownTimeout != 3*time.Second || cfg.AccessTokenTTL != 10*time.Minute || cfg.RefreshTokenTTL != 48*time.Hour || cfg.MinIOEndpoint != "minio:9000" || cfg.MinIOPublicEndpoint != "localhost:59010" || cfg.RabbitMQURL != "amqp://user:pass@rabbitmq:5672/" || !cfg.MinIOSecure || cfg.MinIOPublicSecure || cfg.MaxUploadBytes != 1048576 || cfg.MultipartPartSize != 5242880 || cfg.MultipartMaxParts != 1000 || cfg.MultipartMaxBytes != 5242880000 || cfg.MultipartSessionTTL != 12*time.Hour || cfg.MultipartURLTTL != 10*time.Minute || cfg.MultipartCompletionGrace != 45*time.Minute || cfg.MultipartCleanupLimit != 25 {
 		t.Fatalf("unexpected overrides: %+v", cfg)
 	}
 }

@@ -8,7 +8,7 @@ import (
 
 func TestDefaultTopologyMatchesContract(t *testing.T) {
 	topology := DefaultTopology()
-	if len(topology.Exchanges) != 3 || len(topology.Queues) != 8 || len(topology.Bindings) != 8 {
+	if len(topology.Exchanges) != 3 || len(topology.Queues) != 8 || len(topology.Bindings) != 9 {
 		t.Fatalf("unexpected topology counts: %+v", topology)
 	}
 	if topology.Queues[0].DeadLetter != "processing.jobs.dlq" {

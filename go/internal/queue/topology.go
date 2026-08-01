@@ -41,7 +41,8 @@ func DefaultTopology() Topology {
 		Bindings: []Binding{
 			{CommandsExchange, "processing.jobs", "processing.job.requested"},
 			{CommandsExchange, "processing.cancellations", "processing.job.cancel-requested"},
-			{EventsExchange, "control-plane.results", "processing.#"},
+			{EventsExchange, "control-plane.results", "processing.job.#"},
+			{EventsExchange, "control-plane.results", "processing.artifact.created"},
 			{EventsExchange, "audit.events", "audit.#"},
 			{EventsExchange, "monitoring.events", "monitoring.#"},
 			{DeadLetterExchange, "processing.jobs.dlq", "processing.jobs.dlq"},

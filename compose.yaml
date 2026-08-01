@@ -97,6 +97,7 @@ services:
       JWT_SIGNING_KEY: ${JWT_SIGNING_KEY:?JWT_SIGNING_KEY is required}
       PIPEFORGE_ACCESS_TOKEN_TTL: ${PIPEFORGE_ACCESS_TOKEN_TTL:-15m}
       PIPEFORGE_REFRESH_TOKEN_TTL: ${PIPEFORGE_REFRESH_TOKEN_TTL:-720h}
+      RABBITMQ_URL: amqp://${RABBITMQ_USER:?RABBITMQ_USER is required}:${RABBITMQ_PASSWORD:?RABBITMQ_PASSWORD is required}@rabbitmq:5672/
       MINIO_ENDPOINT: minio:9000
       MINIO_PUBLIC_ENDPOINT: ${MINIO_PUBLIC_ENDPOINT:?MINIO_PUBLIC_ENDPOINT is required}
       MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY:?MINIO_ACCESS_KEY is required}
@@ -183,6 +184,7 @@ services:
       PIPEFORGE_DATABASE_MAX_CONNS: ${PIPEFORGE_DATABASE_MAX_CONNS:-10}
       PIPEFORGE_SHUTDOWN_TIMEOUT: ${PIPEFORGE_SHUTDOWN_TIMEOUT:-10s}
       JWT_SIGNING_KEY: ${JWT_SIGNING_KEY:?JWT_SIGNING_KEY is required}
+      RABBITMQ_URL: amqp://${RABBITMQ_USER:?RABBITMQ_USER is required}:${RABBITMQ_PASSWORD:?RABBITMQ_PASSWORD is required}@rabbitmq:5672/
       MINIO_ENDPOINT: minio:9000
       MINIO_PUBLIC_ENDPOINT: ${MINIO_PUBLIC_ENDPOINT:?MINIO_PUBLIC_ENDPOINT is required}
       MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY:?MINIO_ACCESS_KEY is required}
@@ -208,6 +210,38 @@ services:
       minio-init:
         condition: service_completed_successfully
     restart: "no"
+
+  result-consumer:
+    build:
+      context: .
+      dockerfile: infrastructure/docker/go-api.Dockerfile
+    profiles: [jobs]
+    entrypoint: ["/usr/local/bin/pipeforge-result-consumer"]
+    environment:
+      PIPEFORGE_ENV: ${PIPEFORGE_ENV:-development}
+      PIPEFORGE_LOG_LEVEL: ${PIPEFORGE_LOG_LEVEL:-info}
+      PIPEFORGE_DATABASE_MAX_CONNS: ${PIPEFORGE_DATABASE_MAX_CONNS:-10}
+      PIPEFORGE_SHUTDOWN_TIMEOUT: ${PIPEFORGE_SHUTDOWN_TIMEOUT:-10s}
+      RABBITMQ_URL: amqp://${RABBITMQ_USER:?RABBITMQ_USER is required}:${RABBITMQ_PASSWORD:?RABBITMQ_PASSWORD is required}@rabbitmq:5672/
+      JWT_SIGNING_KEY: ${JWT_SIGNING_KEY:?JWT_SIGNING_KEY is required}
+      MINIO_ENDPOINT: minio:9000
+      MINIO_PUBLIC_ENDPOINT: ${MINIO_PUBLIC_ENDPOINT:?MINIO_PUBLIC_ENDPOINT is required}
+      MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY:?MINIO_ACCESS_KEY is required}
+      MINIO_SECRET_KEY: ${MINIO_SECRET_KEY:?MINIO_SECRET_KEY is required}
+      MINIO_SECURE: ${MINIO_SECURE:-false}
+      MINIO_PUBLIC_SECURE: ${MINIO_PUBLIC_SECURE:-false}
+      MINIO_DATASET_BUCKET: ${MINIO_DATASET_BUCKET:-datasets}
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+      POSTGRES_DATABASE: ${POSTGRES_DATABASE:?POSTGRES_DATABASE is required}
+      POSTGRES_USER: ${POSTGRES_USER:?POSTGRES_USER is required}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rabbitmq-init:
+        condition: service_completed_successfully
+    restart: unless-stopped
 
   migrate:
     build:

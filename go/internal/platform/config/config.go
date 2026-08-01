@@ -20,6 +20,7 @@ const (
 	defaultDevelopmentJWTKey        = "pipeforge-local-jwt-key-change-me"
 	defaultDevelopmentMinIOKey      = "pipeforge"
 	defaultDevelopmentMinIOSecret   = "pipeforge-local-minio-secret"
+	defaultDevelopmentRabbitMQURL   = "amqp://pipeforge:pipeforge-local-rabbitmq@localhost:55672/"
 	defaultDatasetBucket            = "datasets"
 	defaultMaxUploadBytes           = int64(64 * 1024 * 1024)
 	defaultMultipartPartSize        = int64(8 * 1024 * 1024)
@@ -53,6 +54,7 @@ type Config struct {
 	MinIOSecretKey           string
 	MinIOSecure              bool
 	MinIOPublicSecure        bool
+	RabbitMQURL              string
 	DatasetBucket            string
 	MaxUploadBytes           int64
 	MultipartPartSize        int64
@@ -80,11 +82,13 @@ func Load(getenv func(string) string) (Config, error) {
 	minioSecretKey := getenv("MINIO_SECRET_KEY")
 	minioEndpoint := getenv("MINIO_ENDPOINT")
 	minioPublicEndpoint := getenv("MINIO_PUBLIC_ENDPOINT")
+	rabbitMQURL := getenv("RABBITMQ_URL")
 	if environment == "development" {
 		minioAccessKey = valueOrDefault(minioAccessKey, defaultDevelopmentMinIOKey)
 		minioSecretKey = valueOrDefault(minioSecretKey, defaultDevelopmentMinIOSecret)
 		minioEndpoint = valueOrDefault(minioEndpoint, "localhost:59010")
 		minioPublicEndpoint = valueOrDefault(minioPublicEndpoint, "localhost:59010")
+		rabbitMQURL = valueOrDefault(rabbitMQURL, defaultDevelopmentRabbitMQURL)
 	}
 	cfg := Config{
 		Environment:              environment,
@@ -103,6 +107,7 @@ func Load(getenv func(string) string) (Config, error) {
 		MinIOPublicEndpoint:      minioPublicEndpoint,
 		MinIOAccessKey:           minioAccessKey,
 		MinIOSecretKey:           minioSecretKey,
+		RabbitMQURL:              rabbitMQURL,
 		DatasetBucket:            valueOrDefault(getenv("MINIO_DATASET_BUCKET"), defaultDatasetBucket),
 		MaxUploadBytes:           defaultMaxUploadBytes,
 		MultipartPartSize:        defaultMultipartPartSize,
@@ -240,6 +245,9 @@ func (c Config) validate() error {
 	}
 	if strings.TrimSpace(c.MinIOAccessKey) == "" || strings.TrimSpace(c.MinIOSecretKey) == "" || strings.TrimSpace(c.DatasetBucket) == "" {
 		return errors.New("MinIO credentials and dataset bucket must not be empty")
+	}
+	if strings.TrimSpace(c.RabbitMQURL) == "" {
+		return errors.New("RABBITMQ_URL must be set")
 	}
 	_, httpPort, err := net.SplitHostPort(c.HTTPAddr)
 	if err != nil {

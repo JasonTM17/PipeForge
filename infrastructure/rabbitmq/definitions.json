@@ -21,7 +21,8 @@
   "bindings": [
     {"source": "pipeforge.commands", "vhost": "/", "destination": "processing.jobs", "destination_type": "queue", "routing_key": "processing.job.requested", "arguments": {}},
     {"source": "pipeforge.commands", "vhost": "/", "destination": "processing.cancellations", "destination_type": "queue", "routing_key": "processing.job.cancel-requested", "arguments": {}},
-    {"source": "pipeforge.events", "vhost": "/", "destination": "control-plane.results", "destination_type": "queue", "routing_key": "processing.#", "arguments": {}},
+    {"source": "pipeforge.events", "vhost": "/", "destination": "control-plane.results", "destination_type": "queue", "routing_key": "processing.job.#", "arguments": {}},
+    {"source": "pipeforge.events", "vhost": "/", "destination": "control-plane.results", "destination_type": "queue", "routing_key": "processing.artifact.created", "arguments": {}},
     {"source": "pipeforge.events", "vhost": "/", "destination": "audit.events", "destination_type": "queue", "routing_key": "audit.#", "arguments": {}},
     {"source": "pipeforge.events", "vhost": "/", "destination": "monitoring.events", "destination_type": "queue", "routing_key": "monitoring.#", "arguments": {}},
     {"source": "pipeforge.dead-letter", "vhost": "/", "destination": "processing.jobs.dlq", "destination_type": "queue", "routing_key": "processing.jobs.dlq", "arguments": {}},
@@ -29,4 +30,3 @@
     {"source": "pipeforge.dead-letter", "vhost": "/", "destination": "control-plane.results.dlq", "destination_type": "queue", "routing_key": "control-plane.results.dlq", "arguments": {}}
   ]
 }
-
