@@ -12,8 +12,10 @@ import (
 	"github.com/JasonTM17/PipeForge/go/internal/dataset"
 	"github.com/JasonTM17/PipeForge/go/internal/httpapi"
 	"github.com/JasonTM17/PipeForge/go/internal/identity"
+	"github.com/JasonTM17/PipeForge/go/internal/job"
 	"github.com/JasonTM17/PipeForge/go/internal/multipart"
 	"github.com/JasonTM17/PipeForge/go/internal/observability"
+	"github.com/JasonTM17/PipeForge/go/internal/outbox"
 	"github.com/JasonTM17/PipeForge/go/internal/platform/config"
 	"github.com/JasonTM17/PipeForge/go/internal/platform/database"
 	"github.com/JasonTM17/PipeForge/go/internal/storage"
@@ -54,14 +56,27 @@ func run() error {
 	if err != nil {
 		return err
 	}
-	datasetService, err := dataset.NewService(dataset.NewRepository(pool), objectStore, cfg.MaxUploadBytes)
+	datasetRepository := dataset.NewRepository(pool)
+	datasetService, err := dataset.NewService(datasetRepository, objectStore, cfg.MaxUploadBytes)
 	if err != nil {
 		return err
 	}
-	multipartService, err := multipart.NewService(dataset.NewRepository(pool), multipart.NewRepository(pool), objectStore, multipart.Config{
+	multipartService, err := multipart.NewService(datasetRepository, multipart.NewRepository(pool), objectStore, multipart.Config{
 		PartSize: cfg.MultipartPartSize, MaxParts: cfg.MultipartMaxParts, MaxBytes: cfg.MultipartMaxBytes,
 		SessionTTL: cfg.MultipartSessionTTL, PartURLTTL: cfg.MultipartURLTTL, CompletionGrace: cfg.MultipartCompletionGrace,
 	})
+	if err != nil {
+		return err
+	}
+	outboxRepository, err := outbox.NewRepository(pool)
+	if err != nil {
+		return err
+	}
+	jobRepository, err := job.NewRepository(pool, outboxRepository)
+	if err != nil {
+		return err
+	}
+	jobService, err := job.NewService(jobRepository, datasetRepository)
 	if err != nil {
 		return err
 	}
@@ -73,6 +88,7 @@ func run() error {
 		Identity:  identityService,
 		Dataset:   datasetService,
 		Multipart: multipartService,
+		Job:       jobService,
 		Readiness: func(ctx context.Context) error {
 			if err := pool.Ping(ctx); err != nil {
 				return err
