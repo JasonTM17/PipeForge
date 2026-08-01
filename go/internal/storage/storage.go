@@ -3,6 +3,7 @@ package storage
 import (
 	"context"
 	"io"
+	"time"
 )
 
 type ObjectInfo struct {
@@ -17,4 +18,18 @@ type ObjectStore interface {
 	Head(context.Context, string) (ObjectInfo, error)
 	Get(context.Context, string) (io.ReadCloser, error)
 	Delete(context.Context, string) error
+}
+
+type MultipartPart struct {
+	PartNumber int
+	ETag       string
+	Size       int64
+}
+
+type MultipartStore interface {
+	InitiateMultipart(context.Context, string, string) (string, error)
+	PresignPart(context.Context, string, string, int, time.Duration) (string, error)
+	ListMultipartParts(context.Context, string, string) ([]MultipartPart, error)
+	CompleteMultipart(context.Context, string, string, []MultipartPart, string) (ObjectInfo, error)
+	AbortMultipart(context.Context, string, string) error
 }

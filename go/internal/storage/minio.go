@@ -4,6 +4,10 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"net/http"
+	"net/url"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/minio/minio-go/v7"
@@ -22,6 +26,7 @@ type MinIOConfig struct {
 
 type MinIOStore struct {
 	client *minio.Client
+	core   *minio.Core
 	bucket string
 }
 
@@ -29,14 +34,14 @@ func NewMinIO(config MinIOConfig) (*MinIOStore, error) {
 	if config.Endpoint == "" || config.AccessKey == "" || config.SecretKey == "" || config.Bucket == "" {
 		return nil, fmt.Errorf("MinIO endpoint, credentials, and bucket are required")
 	}
-	client, err := minio.New(config.Endpoint, &minio.Options{
+	core, err := minio.NewCore(config.Endpoint, &minio.Options{
 		Creds:  credentials.NewStaticV4(config.AccessKey, config.SecretKey, ""),
 		Secure: config.Secure,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("create MinIO client: %w", err)
 	}
-	return &MinIOStore{client: client, bucket: config.Bucket}, nil
+	return &MinIOStore{client: core.Client, core: core, bucket: config.Bucket}, nil
 }
 
 func (s *MinIOStore) Put(ctx context.Context, key string, reader io.Reader, size int64, contentType string) (ObjectInfo, error) {
@@ -107,6 +112,91 @@ func (s *MinIOStore) Ping(ctx context.Context) error {
 	}
 	if !exists {
 		return fmt.Errorf("MinIO bucket %s does not exist", s.bucket)
+	}
+	return nil
+}
+
+func (s *MinIOStore) InitiateMultipart(ctx context.Context, key, contentType string) (string, error) {
+	if s == nil || s.core == nil {
+		return "", fmt.Errorf("MinIO store is not configured")
+	}
+	operationCtx, cancel := context.WithTimeout(nonNilContext(ctx), operationTimeout)
+	defer cancel()
+	uploadID, err := s.core.NewMultipartUpload(operationCtx, s.bucket, key, minio.PutObjectOptions{ContentType: contentType})
+	if err != nil {
+		return "", fmt.Errorf("initiate multipart object %s: %w", key, err)
+	}
+	return uploadID, nil
+}
+
+func (s *MinIOStore) PresignPart(ctx context.Context, key, uploadID string, partNumber int, expires time.Duration) (string, error) {
+	if s == nil || s.client == nil {
+		return "", fmt.Errorf("MinIO store is not configured")
+	}
+	if partNumber < 1 || expires <= 0 || expires > 7*24*time.Hour {
+		return "", fmt.Errorf("invalid multipart presign parameters")
+	}
+	operationCtx, cancel := context.WithTimeout(nonNilContext(ctx), operationTimeout)
+	defer cancel()
+	requestParams := url.Values{
+		"partNumber": {strconv.Itoa(partNumber)},
+		"uploadId":   {uploadID},
+	}
+	presigned, err := s.client.Presign(operationCtx, http.MethodPut, s.bucket, key, expires, requestParams)
+	if err != nil {
+		return "", fmt.Errorf("presign multipart part %d: %w", partNumber, err)
+	}
+	return presigned.String(), nil
+}
+
+func (s *MinIOStore) ListMultipartParts(ctx context.Context, key, uploadID string) ([]MultipartPart, error) {
+	if s == nil || s.core == nil {
+		return nil, fmt.Errorf("MinIO store is not configured")
+	}
+	operationCtx, cancel := context.WithTimeout(nonNilContext(ctx), operationTimeout)
+	defer cancel()
+	parts := make([]MultipartPart, 0)
+	marker := 0
+	for {
+		result, err := s.core.ListObjectParts(operationCtx, s.bucket, key, uploadID, marker, 10000)
+		if err != nil {
+			return nil, fmt.Errorf("list multipart parts for %s: %w", key, err)
+		}
+		for _, part := range result.ObjectParts {
+			parts = append(parts, MultipartPart{PartNumber: part.PartNumber, ETag: strings.Trim(part.ETag, `"`), Size: part.Size})
+		}
+		if !result.IsTruncated || result.NextPartNumberMarker <= marker {
+			return parts, nil
+		}
+		marker = result.NextPartNumberMarker
+	}
+}
+
+func (s *MinIOStore) CompleteMultipart(ctx context.Context, key, uploadID string, parts []MultipartPart, contentType string) (ObjectInfo, error) {
+	if s == nil || s.core == nil {
+		return ObjectInfo{}, fmt.Errorf("MinIO store is not configured")
+	}
+	completeParts := make([]minio.CompletePart, 0, len(parts))
+	for _, part := range parts {
+		completeParts = append(completeParts, minio.CompletePart{PartNumber: part.PartNumber, ETag: strings.Trim(part.ETag, `"`)})
+	}
+	operationCtx, cancel := context.WithTimeout(nonNilContext(ctx), operationTimeout)
+	defer cancel()
+	info, err := s.core.CompleteMultipartUpload(operationCtx, s.bucket, key, uploadID, completeParts, minio.PutObjectOptions{ContentType: contentType})
+	if err != nil {
+		return ObjectInfo{}, fmt.Errorf("complete multipart object %s: %w", key, err)
+	}
+	return ObjectInfo{Key: key, Size: info.Size, ETag: info.ETag, ContentType: contentType}, nil
+}
+
+func (s *MinIOStore) AbortMultipart(ctx context.Context, key, uploadID string) error {
+	if s == nil || s.core == nil {
+		return fmt.Errorf("MinIO store is not configured")
+	}
+	operationCtx, cancel := context.WithTimeout(nonNilContext(ctx), operationTimeout)
+	defer cancel()
+	if err := s.core.AbortMultipartUpload(operationCtx, s.bucket, key, uploadID); err != nil {
+		return fmt.Errorf("abort multipart object %s: %w", key, err)
 	}
 	return nil
 }
