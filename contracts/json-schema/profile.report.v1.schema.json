@@ -1,0 +1,66 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://pipeforge.dev/contracts/profile.report.v1.schema.json",
+  "title": "PipeForge profile report v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "dataset", "columns", "warnings"],
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "dataset": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["fileSizeBytes", "rowCount", "columnCount", "duplicateRowCount", "missingCellCount", "estimatedMemoryBytes", "processingDurationSeconds", "throughputRowsPerSecond", "chunkCount", "parsingWarningCount"],
+      "properties": {
+        "fileSizeBytes": { "type": "integer", "minimum": 0 },
+        "rowCount": { "type": "integer", "minimum": 0 },
+        "columnCount": { "type": "integer", "minimum": 0 },
+        "duplicateRowCount": { "type": ["integer", "null"], "minimum": 0 },
+        "missingCellCount": { "type": "integer", "minimum": 0 },
+        "estimatedMemoryBytes": { "type": "integer", "minimum": 0 },
+        "processingDurationSeconds": { "type": "number", "minimum": 0 },
+        "throughputRowsPerSecond": { "type": "number", "minimum": 0 },
+        "chunkCount": { "type": "integer", "minimum": 0 },
+        "parsingWarningCount": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "columns": {
+      "type": "array",
+      "maxItems": 256,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["name", "inferredType", "nullable", "missingCount", "missingPercentage", "distinctCount", "distinctApproximate", "minimum", "maximum", "mean", "median", "standardDeviation", "quantiles", "minimumStringLength", "maximumStringLength", "commonValues", "typeViolationCount"],
+        "properties": {
+          "name": { "type": "string", "minLength": 1, "maxLength": 256 },
+          "inferredType": { "type": "string", "maxLength": 64 },
+          "nullable": { "type": "boolean" },
+          "missingCount": { "type": "integer", "minimum": 0 },
+          "missingPercentage": { "type": "number", "minimum": 0, "maximum": 100 },
+          "distinctCount": { "type": "integer", "minimum": 0 },
+          "distinctApproximate": { "type": "boolean" },
+          "minimum": { "type": ["number", "null"] },
+          "maximum": { "type": ["number", "null"] },
+          "mean": { "type": ["number", "null"] },
+          "median": { "type": ["number", "null"] },
+          "standardDeviation": { "type": ["number", "null"] },
+          "quantiles": { "type": "object", "additionalProperties": { "type": "number" } },
+          "minimumStringLength": { "type": ["integer", "null"], "minimum": 0 },
+          "maximumStringLength": { "type": ["integer", "null"], "minimum": 0 },
+          "commonValues": {
+            "type": "array",
+            "maxItems": 100,
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["value", "count"],
+              "properties": { "value": {}, "count": { "type": "integer", "minimum": 1 } }
+            }
+          },
+          "typeViolationCount": { "type": "integer", "minimum": 0 }
+        }
+      }
+    },
+    "warnings": { "type": "array", "maxItems": 512, "items": { "type": "string", "maxLength": 256 } }
+  }
+}

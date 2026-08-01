@@ -1,0 +1,56 @@
+{
+  "schemaVersion": 1,
+  "dataset": {
+    "fileSizeBytes": 42,
+    "rowCount": 2,
+    "columnCount": 2,
+    "duplicateRowCount": 0,
+    "missingCellCount": 1,
+    "estimatedMemoryBytes": 64,
+    "processingDurationSeconds": 0.01,
+    "throughputRowsPerSecond": 200.0,
+    "chunkCount": 1,
+    "parsingWarningCount": 0
+  },
+  "columns": [
+    {
+      "name": "id",
+      "inferredType": "numeric",
+      "nullable": false,
+      "missingCount": 0,
+      "missingPercentage": 0.0,
+      "distinctCount": 2,
+      "distinctApproximate": false,
+      "minimum": 1.0,
+      "maximum": 2.0,
+      "mean": 1.5,
+      "median": 1.5,
+      "standardDeviation": 0.5,
+      "quantiles": { "0.5": 1.5 },
+      "minimumStringLength": null,
+      "maximumStringLength": null,
+      "commonValues": [],
+      "typeViolationCount": 0
+    },
+    {
+      "name": "email",
+      "inferredType": "string",
+      "nullable": true,
+      "missingCount": 1,
+      "missingPercentage": 50.0,
+      "distinctCount": 1,
+      "distinctApproximate": false,
+      "minimum": null,
+      "maximum": null,
+      "mean": null,
+      "median": null,
+      "standardDeviation": null,
+      "quantiles": {},
+      "minimumStringLength": 17,
+      "maximumStringLength": 17,
+      "commonValues": [],
+      "typeViolationCount": 0
+    }
+  ],
+  "warnings": []
+}

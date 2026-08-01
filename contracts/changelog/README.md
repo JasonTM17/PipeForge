@@ -10,4 +10,5 @@ complete.
 - Added the common envelope with message, trace, correlation, and causation IDs.
 - Added processing job request/cancel/start/progress/success/failure messages.
 - Added worker registration/heartbeat and artifact-created events.
+- Added the versioned profile report artifact schema and fixture.
 - Examples and negative fixtures are validated by `python scripts/validate-contracts.py`.
