@@ -21,9 +21,8 @@ func (r *Repository) ReserveVersion(ctx context.Context, reservation VersionRese
 		return DatasetVersion{}, fmt.Errorf("begin version reservation: %w", err)
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
-	var ownerID uuid.UUID
 	var datasetState string
-	if err := tx.QueryRow(ctx, `SELECT owner_user_id, state FROM datasets WHERE id = $1 FOR UPDATE`, reservation.DatasetID).Scan(&ownerID, &datasetState); err != nil {
+	if err := tx.QueryRow(ctx, `SELECT state FROM datasets WHERE id = $1 FOR UPDATE`, reservation.DatasetID).Scan(&datasetState); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return DatasetVersion{}, ErrDatasetNotFound
 		}
@@ -54,7 +53,7 @@ RETURNING id, dataset_id, version_number, state, original_filename, content_type
 		if _, err := tx.Exec(ctx, `UPDATE datasets SET state = 'UPLOADING', updated_at = NOW() WHERE id = $1`, reservation.DatasetID); err != nil {
 			return DatasetVersion{}, fmt.Errorf("mark dataset uploading: %w", err)
 		}
-		if _, err := tx.Exec(ctx, `INSERT INTO dataset_state_history (dataset_id, from_state, to_state, reason, actor_user_id) VALUES ($1, $2, 'UPLOADING', 'version_upload_started', $3)`, reservation.DatasetID, datasetState, ownerID); err != nil {
+		if _, err := tx.Exec(ctx, `INSERT INTO dataset_state_history (dataset_id, from_state, to_state, reason, actor_user_id) VALUES ($1, $2, 'UPLOADING', 'version_upload_started', $3)`, reservation.DatasetID, datasetState, reservation.CreatedBy); err != nil {
 			return DatasetVersion{}, fmt.Errorf("record upload start history: %w", err)
 		}
 	}
@@ -64,7 +63,7 @@ RETURNING id, dataset_id, version_number, state, original_filename, content_type
 	return version, nil
 }
 
-func (r *Repository) FinalizeVersion(ctx context.Context, datasetID, versionID uuid.UUID, size int64, checksum string) (DatasetVersion, error) {
+func (r *Repository) FinalizeVersion(ctx context.Context, datasetID, versionID, actorID uuid.UUID, size int64, checksum string) (DatasetVersion, error) {
 	tx, err := r.pool.Begin(ctx)
 	if err != nil {
 		return DatasetVersion{}, fmt.Errorf("begin version finalization: %w", err)
@@ -86,7 +85,7 @@ func (r *Repository) FinalizeVersion(ctx context.Context, datasetID, versionID u
 	if _, err := tx.Exec(ctx, `UPDATE datasets SET state = 'AVAILABLE', updated_at = NOW() WHERE id = $1`, datasetID); err != nil {
 		return DatasetVersion{}, fmt.Errorf("mark dataset available: %w", err)
 	}
-	if _, err := tx.Exec(ctx, `INSERT INTO dataset_state_history (dataset_id, from_state, to_state, reason) VALUES ($1, 'UPLOADING', 'AVAILABLE', 'version_upload_completed')`, datasetID); err != nil {
+	if _, err := tx.Exec(ctx, `INSERT INTO dataset_state_history (dataset_id, from_state, to_state, reason, actor_user_id) VALUES ($1, 'UPLOADING', 'AVAILABLE', 'version_upload_completed', $2)`, datasetID, actorID); err != nil {
 		return DatasetVersion{}, fmt.Errorf("record upload completion history: %w", err)
 	}
 	version, err := scanVersion(tx.QueryRow(ctx, versionSelect+`WHERE v.id = $1`, versionID), false)

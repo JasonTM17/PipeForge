@@ -215,7 +215,7 @@ func (s *httpDatasetStore) ReserveVersion(_ context.Context, reservation dataset
 	return version, nil
 }
 
-func (s *httpDatasetStore) FinalizeVersion(_ context.Context, datasetID, versionID uuid.UUID, size int64, checksum string) (dataset.DatasetVersion, error) {
+func (s *httpDatasetStore) FinalizeVersion(_ context.Context, datasetID, versionID, _ uuid.UUID, size int64, checksum string) (dataset.DatasetVersion, error) {
 	version, ok := s.versions[versionID]
 	if !ok || version.DatasetID != datasetID {
 		return dataset.DatasetVersion{}, dataset.ErrVersionNotFound

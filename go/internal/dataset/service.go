@@ -179,35 +179,35 @@ func (s *Service) UploadVersion(ctx context.Context, principal auth.Principal, d
 	reader := io.TeeReader(limited, hasher)
 	object, err := s.Objects.Put(ctx, reservation.ObjectKey, reader, -1, contentType)
 	if err != nil {
-		return DatasetVersion{}, s.cleanupUpload(ctx, datasetID, versionID, reservation.ObjectKey, fmt.Errorf("%w: %v", ErrObjectStorage, err))
+		return DatasetVersion{}, s.cleanupUpload(ctx, datasetID, versionID, principal.UserID, reservation.ObjectKey, fmt.Errorf("%w: %v", ErrObjectStorage, err))
 	}
 	actualSize := counter.Count
 	if actualSize > s.MaxUploadBytes {
-		return DatasetVersion{}, s.cleanupUpload(ctx, datasetID, versionID, reservation.ObjectKey, ErrUploadTooLarge)
+		return DatasetVersion{}, s.cleanupUpload(ctx, datasetID, versionID, principal.UserID, reservation.ObjectKey, ErrUploadTooLarge)
 	}
 	if request.ContentLength >= 0 && actualSize != request.ContentLength {
-		return DatasetVersion{}, s.cleanupUpload(ctx, datasetID, versionID, reservation.ObjectKey, ErrUploadSizeMismatch)
+		return DatasetVersion{}, s.cleanupUpload(ctx, datasetID, versionID, principal.UserID, reservation.ObjectKey, ErrUploadSizeMismatch)
 	}
 	if object.Size >= 0 && object.Size != actualSize {
-		return DatasetVersion{}, s.cleanupUpload(ctx, datasetID, versionID, reservation.ObjectKey, ErrUploadSizeMismatch)
+		return DatasetVersion{}, s.cleanupUpload(ctx, datasetID, versionID, principal.UserID, reservation.ObjectKey, ErrUploadSizeMismatch)
 	}
 	actualChecksum := upload.ChecksumBytes(hasher.Sum(nil))
 	if checksum != "" && checksum != actualChecksum {
-		return DatasetVersion{}, s.cleanupUpload(ctx, datasetID, versionID, reservation.ObjectKey, ErrChecksumMismatch)
+		return DatasetVersion{}, s.cleanupUpload(ctx, datasetID, versionID, principal.UserID, reservation.ObjectKey, ErrChecksumMismatch)
 	}
 	if _, err := s.Objects.Head(ctx, reservation.ObjectKey); err != nil {
-		return DatasetVersion{}, s.cleanupUpload(ctx, datasetID, versionID, reservation.ObjectKey, fmt.Errorf("%w: verify stored object: %v", ErrObjectStorage, err))
+		return DatasetVersion{}, s.cleanupUpload(ctx, datasetID, versionID, principal.UserID, reservation.ObjectKey, fmt.Errorf("%w: verify stored object: %v", ErrObjectStorage, err))
 	}
-	version, err := s.Store.FinalizeVersion(ctx, datasetID, versionID, actualSize, actualChecksum)
+	version, err := s.Store.FinalizeVersion(ctx, datasetID, versionID, principal.UserID, actualSize, actualChecksum)
 	if err != nil {
-		return DatasetVersion{}, s.cleanupUpload(ctx, datasetID, versionID, reservation.ObjectKey, err)
+		return DatasetVersion{}, s.cleanupUpload(ctx, datasetID, versionID, principal.UserID, reservation.ObjectKey, err)
 	}
 	return version, nil
 }
 
-func (s *Service) cleanupUpload(ctx context.Context, datasetID, versionID uuid.UUID, objectKey string, primary error) error {
+func (s *Service) cleanupUpload(ctx context.Context, datasetID, versionID, actorID uuid.UUID, objectKey string, primary error) error {
 	deleteErr := s.Objects.Delete(ctx, objectKey)
-	abortErr := s.Store.AbortVersion(ctx, datasetID, versionID, uuid.Nil)
+	abortErr := s.Store.AbortVersion(ctx, datasetID, versionID, actorID)
 	if deleteErr != nil || abortErr != nil {
 		return errors.Join(primary, deleteErr, abortErr)
 	}

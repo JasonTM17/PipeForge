@@ -113,7 +113,7 @@ func (s *memoryDatasetStore) ReserveVersion(_ context.Context, reservation Versi
 	return version, nil
 }
 
-func (s *memoryDatasetStore) FinalizeVersion(_ context.Context, datasetID, versionID uuid.UUID, size int64, checksum string) (DatasetVersion, error) {
+func (s *memoryDatasetStore) FinalizeVersion(_ context.Context, datasetID, versionID, _ uuid.UUID, size int64, checksum string) (DatasetVersion, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	version, ok := s.versions[versionID]
