@@ -1,0 +1,26 @@
+{
+  "schemaVersion": "quality.report.v1",
+  "dataset": {
+    "rowCount": 2,
+    "columns": ["customer_id", "email"],
+    "malformedRowCount": 0
+  },
+  "rules": [
+    {
+      "id": "email-required",
+      "name": "Email is required",
+      "ruleType": "NOT_NULL",
+      "severity": "ERROR",
+      "status": "PASSED",
+      "passedRowCount": 2,
+      "failedRowCount": 0,
+      "evaluatedRowCount": 2,
+      "failurePercentage": 0.0,
+      "durationMs": 1.25,
+      "errorCode": null,
+      "failureReferences": [],
+      "artifactRef": null
+    }
+  ],
+  "warnings": []
+}

@@ -13,6 +13,7 @@ class OperationType(StrEnum):
     CHECK_MISSING_VALUES = "CHECK_MISSING_VALUES"
     CHECK_DUPLICATES = "CHECK_DUPLICATES"
     DETECT_OUTLIERS = "DETECT_OUTLIERS"
+    VALIDATE_QUALITY = "VALIDATE_QUALITY"
 
 
 class OperationConfigError(ValueError):
@@ -70,6 +71,9 @@ def _validate_config(
             raise OperationConfigError(f"operation {index}.column is invalid")
         if method not in {"IQR", "Z_SCORE"}:
             raise OperationConfigError(f"operation {index}.method is invalid")
+        return
+    if operation_type is OperationType.VALIDATE_QUALITY:
+        _validate_quality_config(config, index)
 
 
 def _validate_columns(
@@ -143,6 +147,15 @@ def _validate_profile_config(config: Mapping[str, object], index: int) -> None:
             raise OperationConfigError(
                 f"operation {index}.sensitiveColumns contains an invalid column"
             )
+
+
+def _validate_quality_config(config: Mapping[str, object], index: int) -> None:
+    _require_keys(config, {"rules"}, OperationType.VALIDATE_QUALITY, index)
+    rules = config["rules"]
+    if not isinstance(rules, list) or not 1 <= len(rules) <= 256:
+        raise OperationConfigError(f"operation {index}.rules must contain 1 to 256 rules")
+    if any(not isinstance(rule, Mapping) for rule in rules):
+        raise OperationConfigError(f"operation {index}.rules must contain objects")
 
 
 def _bounded_int(value: object, minimum: int, maximum: int, name: str, index: int) -> None:

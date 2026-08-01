@@ -1,0 +1,59 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://pipeforge.dev/contracts/quality.report.v1.schema.json",
+  "title": "PipeForge quality report v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "dataset", "rules", "warnings"],
+  "properties": {
+    "schemaVersion": { "const": "quality.report.v1" },
+    "dataset": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["rowCount", "columns", "malformedRowCount"],
+      "properties": {
+        "rowCount": { "type": "integer", "minimum": 0 },
+        "columns": { "type": "array", "maxItems": 256, "items": { "type": "string" } },
+        "malformedRowCount": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "rules": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 256,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "name", "ruleType", "severity", "status", "passedRowCount", "failedRowCount", "evaluatedRowCount", "failurePercentage", "durationMs", "errorCode", "failureReferences", "artifactRef"],
+        "properties": {
+          "id": { "type": "string", "minLength": 1, "maxLength": 128 },
+          "name": { "type": "string", "minLength": 1, "maxLength": 120 },
+          "ruleType": { "type": "string" },
+          "severity": { "enum": ["INFO", "WARNING", "ERROR", "CRITICAL"] },
+          "status": { "enum": ["PASSED", "FAILED", "ERROR", "SKIPPED"] },
+          "passedRowCount": { "type": "integer", "minimum": 0 },
+          "failedRowCount": { "type": "integer", "minimum": 0 },
+          "evaluatedRowCount": { "type": "integer", "minimum": 0 },
+          "failurePercentage": { "type": "number", "minimum": 0, "maximum": 100 },
+          "durationMs": { "type": "number", "minimum": 0 },
+          "errorCode": { "type": ["string", "null"] },
+          "failureReferences": {
+            "type": "array",
+            "maxItems": 128,
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["rowNumber", "rowHash"],
+              "properties": {
+                "rowNumber": { "type": "integer", "minimum": 1 },
+                "rowHash": { "type": "string", "pattern": "^[0-9a-f]{16}$" }
+              }
+            }
+          },
+          "artifactRef": { "type": ["string", "null"] }
+        }
+      }
+    },
+    "warnings": { "type": "array", "maxItems": 128, "items": { "type": "string", "maxLength": 256 } }
+  }
+}

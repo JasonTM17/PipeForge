@@ -14,7 +14,23 @@
         "type": "PROFILE_DATASET",
         "config": { "sampling": { "maxRows": 128, "seed": 7 }, "quantiles": [0.5] }
       },
-      { "type": "CHECK_MISSING_VALUES", "config": { "columns": ["email"] } }
+      { "type": "CHECK_MISSING_VALUES", "config": { "columns": ["email"] } },
+      {
+        "type": "VALIDATE_QUALITY",
+        "config": {
+          "rules": [
+            {
+              "id": "email-format",
+              "name": "Email format",
+              "columnScope": ["email"],
+              "ruleType": "EMAIL_FORMAT",
+              "configuration": {},
+              "severity": "ERROR",
+              "enabled": true
+            }
+          ]
+        }
+      }
     ]
   }
 }
