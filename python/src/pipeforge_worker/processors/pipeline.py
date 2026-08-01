@@ -7,6 +7,7 @@ from typing import Any, BinaryIO
 
 from pipeforge_worker.contracts.operations import parse_operations
 from pipeforge_worker.processors.protocols import (
+    ChunkAggregator,
     OperationDispatcher,
     ProcessingContext,
     ProcessingResult,
@@ -59,12 +60,20 @@ class ProcessingPipeline:
                 reporter.emit(session.stats.rows_emitted, session.metadata.estimated_rows)
             context.check_cancellation()
             reporter.emit(session.stats.rows_emitted, session.metadata.estimated_rows, final=True)
+            stats = session.stats.snapshot()
             results = {
-                f"{index}:{operation.type.value}": dict(aggregator.finish())
+                f"{index}:{operation.type.value}": _finish_aggregator(aggregator, stats)
                 for index, (operation, aggregator) in enumerate(aggregators)
             }
             return ProcessingResult(
                 metadata=session.metadata,
-                stats=session.stats.snapshot(),
+                stats=stats,
                 operation_results=results,
             )
+
+
+def _finish_aggregator(aggregator: ChunkAggregator, stats: object) -> dict[str, object]:
+    finish_with_stats = getattr(aggregator, "finish_with_stats", None)
+    if callable(finish_with_stats):
+        return dict(finish_with_stats(stats))
+    return dict(aggregator.finish())

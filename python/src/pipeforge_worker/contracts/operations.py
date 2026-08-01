@@ -54,7 +54,7 @@ def _validate_config(
     index: int,
 ) -> None:
     if operation_type is OperationType.PROFILE_DATASET:
-        _require_keys(config, set(), operation_type, index)
+        _validate_profile_config(config, index)
         return
     if operation_type is OperationType.CHECK_MISSING_VALUES:
         _validate_columns(config, "columns", operation_type, index)
@@ -83,6 +83,71 @@ def _validate_columns(
         raise OperationConfigError(f"operation {index}.{key} contains an invalid column")
     if len(set(columns)) != len(columns):
         raise OperationConfigError(f"operation {index}.{key} must not contain duplicates")
+
+
+def _validate_profile_config(config: Mapping[str, object], index: int) -> None:
+    allowed = {
+        "sampling",
+        "includeCommonValues",
+        "maxCommonValues",
+        "quantiles",
+        "distinctStrategy",
+        "maxDistinctValues",
+        "maxMemoryBytes",
+        "sensitiveColumns",
+    }
+    unknown = set(config) - allowed
+    if unknown:
+        raise OperationConfigError(
+            f"operation {index} PROFILE_DATASET has unknown fields: {sorted(unknown)}"
+        )
+    sampling = config.get("sampling")
+    if sampling is not None:
+        if not isinstance(sampling, Mapping):
+            raise OperationConfigError(f"operation {index}.sampling must be an object")
+        unknown_sampling = set(sampling) - {"strategy", "maxRows", "seed"}
+        if unknown_sampling:
+            raise OperationConfigError(
+                f"operation {index}.sampling has unknown fields: {sorted(unknown_sampling)}"
+            )
+        if sampling.get("strategy", "RESERVOIR") != "RESERVOIR":
+            raise OperationConfigError(f"operation {index}.sampling.strategy is invalid")
+        _bounded_int(sampling.get("maxRows", 2_048), 0, 100_000, "sampling.maxRows", index)
+        _bounded_int(sampling.get("seed", 0), 0, 2**31 - 1, "sampling.seed", index)
+    if "includeCommonValues" in config and not isinstance(config["includeCommonValues"], bool):
+        raise OperationConfigError(f"operation {index}.includeCommonValues must be boolean")
+    if "maxCommonValues" in config:
+        _bounded_int(config["maxCommonValues"], 0, 100, "maxCommonValues", index)
+    quantiles = config.get("quantiles")
+    if quantiles is not None:
+        if not isinstance(quantiles, list) or not 1 <= len(quantiles) <= 32:
+            raise OperationConfigError(f"operation {index}.quantiles must contain 1 to 32 values")
+        if any(
+            isinstance(value, bool) or not isinstance(value, (int, float)) or not 0 <= value <= 1
+            for value in quantiles
+        ):
+            raise OperationConfigError(f"operation {index}.quantiles must be between 0 and 1")
+        if len(set(quantiles)) != len(quantiles):
+            raise OperationConfigError(f"operation {index}.quantiles must not contain duplicates")
+    if "distinctStrategy" in config and config["distinctStrategy"] not in {"EXACT", "APPROXIMATE"}:
+        raise OperationConfigError(f"operation {index}.distinctStrategy is invalid")
+    if "maxDistinctValues" in config:
+        _bounded_int(config["maxDistinctValues"], 128, 1_000_000, "maxDistinctValues", index)
+    if "maxMemoryBytes" in config:
+        _bounded_int(config["maxMemoryBytes"], 1 << 20, 1 << 32, "maxMemoryBytes", index)
+    if "sensitiveColumns" in config:
+        sensitive = config["sensitiveColumns"]
+        if not isinstance(sensitive, list) or len(sensitive) > 256:
+            raise OperationConfigError(f"operation {index}.sensitiveColumns is invalid")
+        if any(not isinstance(column, str) or not _is_safe_column(column) for column in sensitive):
+            raise OperationConfigError(
+                f"operation {index}.sensitiveColumns contains an invalid column"
+            )
+
+
+def _bounded_int(value: object, minimum: int, maximum: int, name: str, index: int) -> None:
+    if isinstance(value, bool) or not isinstance(value, int) or not minimum <= value <= maximum:
+        raise OperationConfigError(f"operation {index}.{name} is outside the supported bound")
 
 
 def _require_keys(
