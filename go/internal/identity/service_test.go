@@ -98,7 +98,7 @@ func TestBearerAuthenticationLoadsCurrentPrincipal(t *testing.T) {
 		t.Fatalf("Register returned error: %v", err)
 	}
 	principal, err := service.AuthenticateBearer(context.Background(), pair.AccessToken)
-	if err != nil || principal.UserID != user.ID || principal.AuthMethod != "bearer" {
+	if err != nil || principal.UserID != user.ID || principal.AuthMethod != auth.AuthMethodBearer {
 		t.Fatalf("unexpected bearer principal=%+v err=%v", principal, err)
 	}
 	store.users[user.ID] = User{ID: user.ID, Email: user.Email, Role: user.Role, Scopes: user.Scopes, DisabledAt: ptrTime(time.Now())}

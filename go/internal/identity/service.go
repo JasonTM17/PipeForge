@@ -152,7 +152,7 @@ func (s *Service) AuthenticateBearer(ctx context.Context, token string) (auth.Pr
 	if err != nil || user.DisabledAt != nil {
 		return auth.Principal{}, ErrInvalidCredentials
 	}
-	return principalForUser(user, "bearer"), nil
+	return principalForUser(user, auth.AuthMethodBearer), nil
 }
 
 func (s *Service) AuthenticateAPIKey(ctx context.Context, value string) (auth.Principal, error) {
@@ -166,7 +166,7 @@ func (s *Service) AuthenticateAPIKey(ctx context.Context, value string) (auth.Pr
 	if err != nil {
 		return auth.Principal{}, err
 	}
-	principal := principalForUser(result.User, "api-key")
+	principal := principalForUser(result.User, auth.AuthMethodAPIKey)
 	principal.Scopes = intersectScopes(result.User.Scopes, result.Scopes)
 	return principal, nil
 }

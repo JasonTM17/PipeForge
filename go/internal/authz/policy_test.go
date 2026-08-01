@@ -20,6 +20,10 @@ func TestOwnerAndRolePolicies(t *testing.T) {
 	if !CanAccessOwner(admin, uuid.New(), ScopeDatasetsWrite) {
 		t.Fatal("admin should bypass ownership while retaining known scope policy")
 	}
+	limitedAdminKey := auth.Principal{UserID: uuid.New(), Role: auth.RoleAdmin, AuthMethod: auth.AuthMethodAPIKey, Scopes: []string{ScopeDatasetsRead}}
+	if HasScope(limitedAdminKey, ScopeDatasetsWrite) {
+		t.Fatal("scoped admin API key should not bypass its key scopes")
+	}
 	if err := RequireScope(user, ScopeJobsWrite); err == nil {
 		t.Fatal("missing scope should be denied")
 	}

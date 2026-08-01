@@ -51,7 +51,7 @@ func HasScope(principal auth.Principal, scope string) bool {
 	if principal.UserID == uuid.Nil || !IsKnownScope(scope) {
 		return false
 	}
-	if principal.Role == auth.RoleAdmin {
+	if principal.Role == auth.RoleAdmin && principal.AuthMethod != auth.AuthMethodAPIKey {
 		return true
 	}
 	for _, granted := range principal.Scopes {
