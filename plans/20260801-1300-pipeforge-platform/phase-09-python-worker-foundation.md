@@ -1,10 +1,13 @@
 ---
 phase: 9
-title: "Python worker foundation"
-status: pending
+title: Python worker foundation
+status: completed
 priority: P1
-effort: "3d"
-dependencies: [2, 7, 8]
+effort: 3d
+dependencies:
+  - 2
+  - 7
+  - 8
 ---
 
 # Phase 9: Python worker foundation
@@ -43,11 +46,11 @@ Create the typed Python package, configuration, structured logging, health/metri
 
 ## Success Criteria
 
-- [ ] `python -m pytest`, `ruff check`, `ruff format --check`, and type checking pass.
-- [ ] Worker can start in health-only mode without a dataset.
-- [ ] Invalid command messages are rejected/DLQ'd without crashing the consumer.
-- [ ] Heartbeat payload satisfies the versioned contract and is throttled.
-- [ ] No plaintext credentials, raw rows, or presigned URLs appear in logs.
+- [x] `python -m pytest`, `ruff check`, `ruff format --check`, and type checking pass.
+- [x] Worker can start in health-only mode without a dataset.
+- [x] Invalid command messages are rejected/DLQ'd without crashing the consumer.
+- [x] Heartbeat payload satisfies the versioned contract and is throttled.
+- [x] No plaintext credentials, raw rows, or presigned URLs appear in logs.
 
 ## Validation
 
@@ -72,4 +75,3 @@ Phase 10 adds dataset readers and the chunk-based processing pipeline.
 ## Unresolved Questions
 
 - None blocking; exact async RabbitMQ client version is pinned after the first integration smoke test.
-
