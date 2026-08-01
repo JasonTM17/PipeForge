@@ -13,6 +13,8 @@ python scripts/validate-contracts.py
 
 Go publishers reject unknown message types, missing envelope fields, invalid payload objects, oversized messages, and missing type-specific required fields before contacting RabbitMQ. Python consumers use the same schemas and must reject invalid messages before processing.
 
+The `processing.job.requested` payload accepts only the four operation types implemented by the control plane: `PROFILE_DATASET`, `CHECK_MISSING_VALUES`, `CHECK_DUPLICATES`, and `DETECT_OUTLIERS`. Column identifiers are bounded SQL-style names (`[A-Za-z_][A-Za-z0-9_]{0,127}`); missing-value and duplicate checks require at least one column, while outlier detection requires `IQR` or `Z_SCORE`. Unknown configuration keys are rejected by the shared schema.
+
 ## Message catalogue
 
 | Type | Direction | Exchange/routing key | Purpose |
