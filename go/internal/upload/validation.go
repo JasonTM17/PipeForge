@@ -49,6 +49,17 @@ func NormalizeFilename(value string) (string, error) {
 }
 
 func DetectFormat(filename, contentType string, prefix []byte) (Format, error) {
+	format, err := DetectDeclaredFormat(filename, contentType)
+	if err != nil {
+		return "", err
+	}
+	if err := validatePrefix(format, prefix); err != nil {
+		return "", err
+	}
+	return format, nil
+}
+
+func DetectDeclaredFormat(filename, contentType string) (Format, error) {
 	name, err := NormalizeFilename(filename)
 	if err != nil {
 		return "", err
@@ -64,9 +75,6 @@ func DetectFormat(filename, contentType string, prefix []byte) (Format, error) {
 	}
 	if format == "" {
 		return "", ErrUnsupportedFormat
-	}
-	if err := validatePrefix(format, prefix); err != nil {
-		return "", err
 	}
 	return format, nil
 }

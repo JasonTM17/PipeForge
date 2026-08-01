@@ -196,6 +196,10 @@ func (s *MinIOStore) AbortMultipart(ctx context.Context, key, uploadID string) e
 	operationCtx, cancel := context.WithTimeout(nonNilContext(ctx), operationTimeout)
 	defer cancel()
 	if err := s.core.AbortMultipartUpload(operationCtx, s.bucket, key, uploadID); err != nil {
+		response := minio.ToErrorResponse(err)
+		if response.Code == "NoSuchUpload" {
+			return nil
+		}
 		return fmt.Errorf("abort multipart object %s: %w", key, err)
 	}
 	return nil
