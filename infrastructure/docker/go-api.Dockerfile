@@ -8,6 +8,7 @@ RUN go mod download
 COPY go/ ./
 RUN CGO_ENABLED=0 go build -trimpath -ldflags='-s -w' -o /out/pipeforge-api ./cmd/api
 RUN CGO_ENABLED=0 go build -trimpath -ldflags='-s -w' -o /out/pipeforge-migrate ./cmd/migrate
+RUN CGO_ENABLED=0 go build -trimpath -ldflags='-s -w' -o /out/pipeforge-scheduler ./cmd/scheduler
 
 FROM alpine:3.20
 
@@ -16,6 +17,7 @@ RUN addgroup -S pipeforge && adduser -S -G pipeforge pipeforge \
 
 COPY --from=build /out/pipeforge-api /usr/local/bin/pipeforge-api
 COPY --from=build /out/pipeforge-migrate /usr/local/bin/pipeforge-migrate
+COPY --from=build /out/pipeforge-scheduler /usr/local/bin/pipeforge-scheduler
 
 USER pipeforge
 EXPOSE 8080

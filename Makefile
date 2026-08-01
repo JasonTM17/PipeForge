@@ -2,7 +2,7 @@ SHELL := /bin/sh
 
 PLAN ?= plans/20260801-1300-pipeforge-platform/plan.md
 
-.PHONY: help plan-status validate-env bootstrap migrate dev down
+.PHONY: help plan-status validate-env bootstrap migrate dev cleanup down
 
 help:
 	@printf '%s\n' 'PipeForge development targets:'
@@ -10,6 +10,7 @@ help:
 	@printf '%s\n' '  make validate-env Validate required local environment values'
 	@printf '%s\n' '  make migrate     Apply database migrations through the Compose tool service'
 	@printf '%s\n' '  make dev          Start the current Compose stack'
+	@printf '%s\n' '  make cleanup      Run one bounded expired multipart cleanup batch'
 	@printf '%s\n' '  make down         Stop PipeForge Compose services'
 	@printf '%s\n' '  make plan-status  Show the active CK implementation plan'
 	@printf '%s\n' '  make help         Show this message'
@@ -28,6 +29,9 @@ migrate: validate-env
 
 dev: validate-env
 	docker compose up --build
+
+cleanup: validate-env
+	docker compose --profile jobs run --rm scheduler
 
 down:
 	docker compose down
