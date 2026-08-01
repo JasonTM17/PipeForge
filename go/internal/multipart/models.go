@@ -24,6 +24,7 @@ var (
 	ErrSessionNotFound     = errors.New("multipart upload session not found")
 	ErrSessionExpired      = errors.New("multipart upload session expired")
 	ErrSessionCompleted    = errors.New("multipart upload session already completed")
+	ErrSessionInProgress   = errors.New("multipart upload session completion is already in progress")
 	ErrSessionState        = errors.New("multipart upload session is not mutable")
 	ErrIdempotencyConflict = errors.New("multipart upload idempotency key conflicts with another request")
 	ErrPartNotFound        = errors.New("multipart upload part not found")
@@ -35,27 +36,29 @@ var (
 )
 
 type Session struct {
-	ID               uuid.UUID     `json:"id"`
-	OwnerUserID      uuid.UUID     `json:"ownerUserId"`
-	DatasetID        uuid.UUID     `json:"datasetId"`
-	VersionID        uuid.UUID     `json:"versionId"`
-	UploadID         string        `json:"-"`
-	ObjectKey        string        `json:"-"`
-	State            string        `json:"state"`
-	OriginalFilename string        `json:"originalFilename"`
-	ContentType      string        `json:"contentType"`
-	Format           upload.Format `json:"format"`
-	ExpectedSize     int64         `json:"expectedSize"`
-	ExpectedChecksum *string       `json:"expectedChecksumSha256,omitempty"`
-	PartSize         int64         `json:"partSize"`
-	PartCount        int           `json:"partCount"`
-	IdempotencyKey   string        `json:"-"`
-	ExpiresAt        time.Time     `json:"expiresAt"`
-	CreatedAt        time.Time     `json:"createdAt"`
-	UpdatedAt        time.Time     `json:"updatedAt"`
-	CompletedAt      *time.Time    `json:"completedAt,omitempty"`
-	AbortedAt        *time.Time    `json:"abortedAt,omitempty"`
-	LastError        *string       `json:"lastError,omitempty"`
+	ID                  uuid.UUID     `json:"id"`
+	OwnerUserID         uuid.UUID     `json:"ownerUserId"`
+	DatasetID           uuid.UUID     `json:"datasetId"`
+	VersionID           uuid.UUID     `json:"versionId"`
+	UploadID            string        `json:"-"`
+	ObjectKey           string        `json:"-"`
+	State               string        `json:"state"`
+	OriginalFilename    string        `json:"originalFilename"`
+	ContentType         string        `json:"contentType"`
+	Format              upload.Format `json:"format"`
+	ExpectedSize        int64         `json:"expectedSize"`
+	ExpectedChecksum    *string       `json:"expectedChecksumSha256,omitempty"`
+	PartSize            int64         `json:"partSize"`
+	PartCount           int           `json:"partCount"`
+	IdempotencyKey      string        `json:"-"`
+	ExpiresAt           time.Time     `json:"expiresAt"`
+	CreatedAt           time.Time     `json:"createdAt"`
+	UpdatedAt           time.Time     `json:"updatedAt"`
+	CompletedAt         *time.Time    `json:"completedAt,omitempty"`
+	AbortedAt           *time.Time    `json:"abortedAt,omitempty"`
+	LastError           *string       `json:"-"`
+	OperationToken      *uuid.UUID    `json:"-"`
+	CompletionStartedAt *time.Time    `json:"-"`
 }
 
 type Part struct {
@@ -102,12 +105,13 @@ type Store interface {
 	FindPart(context.Context, uuid.UUID, int) (Part, error)
 	ListParts(context.Context, uuid.UUID) ([]Part, error)
 	RegisterPart(context.Context, uuid.UUID, int, string, int64) (Part, error)
-	BeginComplete(context.Context, uuid.UUID, uuid.UUID, time.Time) (Session, error)
+	BeginComplete(context.Context, uuid.UUID, uuid.UUID, time.Time, time.Time) (Session, error)
+	BeginReconciliation(context.Context, uuid.UUID, time.Time) (Session, error)
 	BeginAbort(context.Context, uuid.UUID, uuid.UUID, time.Time) (Session, error)
-	ResetCompletion(context.Context, uuid.UUID, string) error
-	MarkCompleted(context.Context, uuid.UUID, time.Time) error
+	ResetCompletion(context.Context, uuid.UUID, uuid.UUID, string) error
+	MarkCompleted(context.Context, uuid.UUID, uuid.UUID, time.Time) error
 	MarkAborted(context.Context, uuid.UUID, time.Time) error
-	MarkFailed(context.Context, uuid.UUID, string) error
+	MarkFailed(context.Context, uuid.UUID, uuid.UUID, string) error
 	ClaimExpired(context.Context, time.Time, time.Time, int) ([]Session, error)
 	MarkExpired(context.Context, uuid.UUID, string, time.Time) error
 }

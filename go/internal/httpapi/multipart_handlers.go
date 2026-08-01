@@ -260,7 +260,7 @@ func writeMultipartError(w http.ResponseWriter, r *http.Request, err error) {
 		WriteProblem(w, r, http.StatusConflict, "SESSION_EXPIRED", "The upload session has expired.", nil)
 	case errors.Is(err, multipart.ErrSessionCompleted):
 		WriteProblem(w, r, http.StatusConflict, "SESSION_COMPLETED", "The upload session is already completed.", nil)
-	case errors.Is(err, multipart.ErrSessionState), errors.Is(err, multipart.ErrIdempotencyConflict), errors.Is(err, multipart.ErrPartConflict), errors.Is(err, dataset.ErrVersionState):
+	case errors.Is(err, multipart.ErrSessionState), errors.Is(err, multipart.ErrSessionInProgress), errors.Is(err, multipart.ErrIdempotencyConflict), errors.Is(err, multipart.ErrPartConflict), errors.Is(err, dataset.ErrVersionState):
 		WriteProblem(w, r, http.StatusConflict, "RESOURCE_STATE_CONFLICT", "The upload session cannot be changed in its current state.", nil)
 	case errors.Is(err, multipart.ErrRemoteStorage), errors.Is(err, dataset.ErrObjectStorage):
 		WriteProblem(w, r, http.StatusBadGateway, "STORAGE_ERROR", "The upload could not be stored or verified.", nil)

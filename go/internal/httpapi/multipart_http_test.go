@@ -194,6 +194,19 @@ func (s *httpMultipartObjectStore) ListMultipartParts(_ context.Context, key, up
 	return parts, nil
 }
 
+func (s *httpMultipartObjectStore) GetMultipartPart(_ context.Context, key, uploadID string, partNumber int) (storage.MultipartPart, error) {
+	parts, err := s.ListMultipartParts(context.Background(), key, uploadID)
+	if err != nil {
+		return storage.MultipartPart{}, err
+	}
+	for _, part := range parts {
+		if part.PartNumber == partNumber {
+			return part, nil
+		}
+	}
+	return storage.MultipartPart{}, storage.ErrMultipartPartNotFound
+}
+
 func (s *httpMultipartObjectStore) CompleteMultipart(_ context.Context, key, uploadID string, parts []storage.MultipartPart, _ string) (storage.ObjectInfo, error) {
 	upload, ok := s.uploads[uploadID]
 	if !ok || upload.key != key {
@@ -290,7 +303,7 @@ func (s *httpMultipartSessionStore) RegisterPart(_ context.Context, id uuid.UUID
 	return part, nil
 }
 
-func (s *httpMultipartSessionStore) BeginComplete(_ context.Context, id, ownerID uuid.UUID, now time.Time) (multipart.Session, error) {
+func (s *httpMultipartSessionStore) BeginComplete(_ context.Context, id, ownerID uuid.UUID, now, _ time.Time) (multipart.Session, error) {
 	session, err := s.FindSession(context.Background(), id)
 	if err != nil || session.OwnerUserID != ownerID {
 		return multipart.Session{}, multipart.ErrSessionNotFound
@@ -299,19 +312,31 @@ func (s *httpMultipartSessionStore) BeginComplete(_ context.Context, id, ownerID
 	case multipart.StateCompleted:
 		return session, multipart.ErrSessionCompleted
 	case multipart.StateCompleting:
-		return session, nil
+		return multipart.Session{}, multipart.ErrSessionInProgress
 	case multipart.StateInitiated:
 		if !now.Before(session.ExpiresAt) {
 			session.State = multipart.StateAborting
 			s.sessions[id] = session
 			return multipart.Session{}, multipart.ErrSessionExpired
 		}
-		session.State = multipart.StateCompleting
+		operationToken := uuid.New()
+		session.State, session.OperationToken, session.CompletionStartedAt = multipart.StateCompleting, &operationToken, &now
 		s.sessions[id] = session
 		return session, nil
 	default:
 		return multipart.Session{}, multipart.ErrSessionState
 	}
+}
+
+func (s *httpMultipartSessionStore) BeginReconciliation(_ context.Context, id uuid.UUID, now time.Time) (multipart.Session, error) {
+	session, err := s.FindSession(context.Background(), id)
+	if err != nil || session.State != multipart.StateAborting {
+		return multipart.Session{}, multipart.ErrSessionState
+	}
+	operationToken := uuid.New()
+	session.State, session.OperationToken, session.CompletionStartedAt = multipart.StateCompleting, &operationToken, &now
+	s.sessions[id] = session
+	return session, nil
 }
 
 func (s *httpMultipartSessionStore) BeginAbort(_ context.Context, id, ownerID uuid.UUID, now time.Time) (multipart.Session, error) {
@@ -334,23 +359,23 @@ func (s *httpMultipartSessionStore) BeginAbort(_ context.Context, id, ownerID uu
 	return session, nil
 }
 
-func (s *httpMultipartSessionStore) ResetCompletion(_ context.Context, id uuid.UUID, message string) error {
+func (s *httpMultipartSessionStore) ResetCompletion(_ context.Context, id, operationToken uuid.UUID, message string) error {
 	session, err := s.FindSession(context.Background(), id)
-	if err != nil || session.State != multipart.StateCompleting {
+	if err != nil || session.State != multipart.StateCompleting || session.OperationToken == nil || *session.OperationToken != operationToken {
 		return multipart.ErrSessionState
 	}
-	session.State = multipart.StateInitiated
+	session.State, session.OperationToken, session.CompletionStartedAt = multipart.StateInitiated, nil, nil
 	session.LastError = &message
 	s.sessions[id] = session
 	return nil
 }
 
-func (s *httpMultipartSessionStore) MarkCompleted(_ context.Context, id uuid.UUID, at time.Time) error {
+func (s *httpMultipartSessionStore) MarkCompleted(_ context.Context, id, operationToken uuid.UUID, at time.Time) error {
 	session, err := s.FindSession(context.Background(), id)
-	if err != nil || session.State != multipart.StateCompleting {
+	if err != nil || session.State != multipart.StateCompleting || session.OperationToken == nil || *session.OperationToken != operationToken {
 		return multipart.ErrSessionState
 	}
-	session.State, session.CompletedAt = multipart.StateCompleted, &at
+	session.State, session.CompletedAt, session.OperationToken, session.CompletionStartedAt = multipart.StateCompleted, &at, nil, nil
 	s.sessions[id] = session
 	return nil
 }
@@ -365,12 +390,15 @@ func (s *httpMultipartSessionStore) MarkAborted(_ context.Context, id uuid.UUID,
 	return nil
 }
 
-func (s *httpMultipartSessionStore) MarkFailed(_ context.Context, id uuid.UUID, message string) error {
+func (s *httpMultipartSessionStore) MarkFailed(_ context.Context, id, operationToken uuid.UUID, message string) error {
 	session, err := s.FindSession(context.Background(), id)
 	if err != nil {
 		return err
 	}
-	session.State, session.LastError = multipart.StateFailed, &message
+	if session.State == multipart.StateCompleting && (session.OperationToken == nil || *session.OperationToken != operationToken) {
+		return multipart.ErrSessionState
+	}
+	session.State, session.LastError, session.OperationToken, session.CompletionStartedAt = multipart.StateFailed, &message, nil, nil
 	s.sessions[id] = session
 	return nil
 }

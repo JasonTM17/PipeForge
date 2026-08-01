@@ -8,6 +8,7 @@ import (
 )
 
 var ErrObjectNotFound = errors.New("object not found")
+var ErrMultipartPartNotFound = errors.New("multipart part not found")
 
 type ObjectInfo struct {
 	Key         string
@@ -33,6 +34,7 @@ type MultipartStore interface {
 	InitiateMultipart(context.Context, string, string) (string, error)
 	PresignPart(context.Context, string, string, int, time.Duration) (string, error)
 	ListMultipartParts(context.Context, string, string) ([]MultipartPart, error)
+	GetMultipartPart(context.Context, string, string, int) (MultipartPart, error)
 	CompleteMultipart(context.Context, string, string, []MultipartPart, string) (ObjectInfo, error)
 	AbortMultipart(context.Context, string, string) error
 }

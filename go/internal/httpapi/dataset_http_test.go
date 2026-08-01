@@ -238,6 +238,10 @@ func (s *httpDatasetStore) FinalizeVersion(_ context.Context, datasetID, version
 	return version, nil
 }
 
+func (s *httpDatasetStore) FinalizeVersionForUpload(ctx context.Context, datasetID, versionID, actorID uuid.UUID, size int64, checksum string, _, _ uuid.UUID) (dataset.DatasetVersion, error) {
+	return s.FinalizeVersion(ctx, datasetID, versionID, actorID, size, checksum)
+}
+
 func (s *httpDatasetStore) FindVersion(_ context.Context, datasetID, versionID uuid.UUID) (dataset.DatasetVersion, error) {
 	version, ok := s.versions[versionID]
 	if !ok || version.DatasetID != datasetID {

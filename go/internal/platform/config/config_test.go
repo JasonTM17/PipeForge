@@ -41,6 +41,7 @@ func TestLoadParsesOverrides(t *testing.T) {
 		"MINIO_SECRET_KEY":                     "secret",
 		"MINIO_DATASET_BUCKET":                 "custom-datasets",
 		"MINIO_SECURE":                         "true",
+		"MINIO_PUBLIC_SECURE":                  "false",
 		"PIPEFORGE_MAX_UPLOAD_BYTES":           "1048576",
 		"PIPEFORGE_MULTIPART_PART_SIZE":        "5242880",
 		"PIPEFORGE_MULTIPART_MAX_PARTS":        "1000",
@@ -54,7 +55,7 @@ func TestLoadParsesOverrides(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Load returned error: %v", err)
 	}
-	if cfg.DatabasePort != 55433 || cfg.DatabaseMaxConns != 4 || cfg.ShutdownTimeout != 3*time.Second || cfg.AccessTokenTTL != 10*time.Minute || cfg.RefreshTokenTTL != 48*time.Hour || cfg.MinIOEndpoint != "minio:9000" || cfg.MinIOPublicEndpoint != "localhost:59010" || !cfg.MinIOSecure || cfg.MaxUploadBytes != 1048576 || cfg.MultipartPartSize != 5242880 || cfg.MultipartMaxParts != 1000 || cfg.MultipartMaxBytes != 5242880000 || cfg.MultipartSessionTTL != 12*time.Hour || cfg.MultipartURLTTL != 10*time.Minute || cfg.MultipartCompletionGrace != 45*time.Minute || cfg.MultipartCleanupLimit != 25 {
+	if cfg.DatabasePort != 55433 || cfg.DatabaseMaxConns != 4 || cfg.ShutdownTimeout != 3*time.Second || cfg.AccessTokenTTL != 10*time.Minute || cfg.RefreshTokenTTL != 48*time.Hour || cfg.MinIOEndpoint != "minio:9000" || cfg.MinIOPublicEndpoint != "localhost:59010" || !cfg.MinIOSecure || cfg.MinIOPublicSecure || cfg.MaxUploadBytes != 1048576 || cfg.MultipartPartSize != 5242880 || cfg.MultipartMaxParts != 1000 || cfg.MultipartMaxBytes != 5242880000 || cfg.MultipartSessionTTL != 12*time.Hour || cfg.MultipartURLTTL != 10*time.Minute || cfg.MultipartCompletionGrace != 45*time.Minute || cfg.MultipartCleanupLimit != 25 {
 		t.Fatalf("unexpected overrides: %+v", cfg)
 	}
 }

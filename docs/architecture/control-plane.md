@@ -28,7 +28,7 @@ flowchart TB
 - Resource ownership and scope checks occur in domain services, not only in HTTP handlers.
 - Dataset version uploads stream through the Go service into MinIO; PostgreSQL records a version only after object size, checksum, and existence are verified.
 - Multipart sessions and registered parts are authoritative in PostgreSQL. Presigned URLs contain only a server-generated object key and opaque upload scope; completion verifies ordered parts, object size, checksum, and detected format before making the version available.
-- Expiry cleanup claims at most the configured batch limit, aborts remote multipart state, fails the staged version, and records an expired terminal session. Fresh completion attempts receive a configurable grace window; transient object-store errors remain retryable, while an existing final object is quarantined for reconciliation. Re-running the command is safe.
+- Expiry cleanup claims at most the configured batch limit. Missing objects are aborted and their staged versions are failed; valid final objects are reconciled into the staged version instead of being deleted. Fresh completion attempts receive a configurable grace window, transient storage/database errors remain retryable, and re-running the command is safe.
 - Internal errors and diagnostic references stay server-side; public problem responses expose stable codes and request IDs.
 
 ## Runtime processes

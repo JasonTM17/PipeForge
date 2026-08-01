@@ -580,6 +580,8 @@ paths:
           $ref: '#/components/responses/InvalidRequest'
         '401':
           $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
         '404':
           $ref: '#/components/responses/NotFound'
         '409':
@@ -606,6 +608,8 @@ paths:
           description: Upload session aborted; repeated aborts are safe.
         '401':
           $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
         '404':
           $ref: '#/components/responses/NotFound'
         '409':
@@ -969,9 +973,6 @@ components:
         abortedAt:
           type: string
           format: date-time
-          nullable: true
-        lastError:
-          type: string
           nullable: true
     MultipartUploadPart:
       type: object

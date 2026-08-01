@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -47,7 +48,7 @@ func (r *Repository) RegisterPart(ctx context.Context, sessionID uuid.UUID, part
 INSERT INTO upload_parts (session_id, part_number, etag, size_bytes)
 SELECT $1, $2, $3, $4
 FROM upload_sessions
-WHERE id = $1 AND state = 'INITIATED'
+WHERE id = $1 AND state = 'INITIATED' AND expires_at > NOW()
 ON CONFLICT (session_id, part_number) DO NOTHING`, sessionID, partNumber, etag, size)
 	if err != nil {
 		return Part{}, fmt.Errorf("register multipart part: %w", err)
@@ -59,6 +60,9 @@ ON CONFLICT (session_id, part_number) DO NOTHING`, sessionID, partNumber, etag, 
 		}
 		if session.State != StateInitiated {
 			return Part{}, ErrSessionState
+		}
+		if !time.Now().UTC().Before(session.ExpiresAt) {
+			return Part{}, ErrSessionExpired
 		}
 	}
 	part, err := r.FindPart(ctx, sessionID, partNumber)

@@ -49,7 +49,7 @@ func run() error {
 	objectStore, err := storage.NewMinIO(storage.MinIOConfig{
 		Endpoint: cfg.MinIOEndpoint, PublicEndpoint: cfg.MinIOPublicEndpoint,
 		AccessKey: cfg.MinIOAccessKey, SecretKey: cfg.MinIOSecretKey,
-		Secure: cfg.MinIOSecure, Bucket: cfg.DatasetBucket,
+		Secure: cfg.MinIOSecure, PublicSecure: cfg.MinIOPublicSecure, Bucket: cfg.DatasetBucket,
 	})
 	if err != nil {
 		return err

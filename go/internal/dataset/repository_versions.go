@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/JasonTM17/PipeForge/go/internal/upload"
 	"github.com/google/uuid"
@@ -75,11 +76,43 @@ func (r *Repository) FindVersion(ctx context.Context, datasetID, versionID uuid.
 }
 
 func (r *Repository) FinalizeVersion(ctx context.Context, datasetID, versionID, actorID uuid.UUID, size int64, checksum string) (DatasetVersion, error) {
+	return r.finalizeVersion(ctx, datasetID, versionID, actorID, size, checksum, uuid.Nil, uuid.Nil)
+}
+
+func (r *Repository) FinalizeVersionForUpload(ctx context.Context, datasetID, versionID, actorID uuid.UUID, size int64, checksum string, sessionID, operationToken uuid.UUID) (DatasetVersion, error) {
+	return r.finalizeVersion(ctx, datasetID, versionID, actorID, size, checksum, sessionID, operationToken)
+}
+
+func (r *Repository) finalizeVersion(ctx context.Context, datasetID, versionID, actorID uuid.UUID, size int64, checksum string, sessionID, operationToken uuid.UUID) (DatasetVersion, error) {
 	tx, err := r.pool.Begin(ctx)
 	if err != nil {
 		return DatasetVersion{}, fmt.Errorf("begin version finalization: %w", err)
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
+	var datasetState string
+	var deletedAt *time.Time
+	if err := tx.QueryRow(ctx, `SELECT state, deleted_at FROM datasets WHERE id = $1 FOR UPDATE`, datasetID).Scan(&datasetState, &deletedAt); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return DatasetVersion{}, ErrDatasetNotFound
+		}
+		return DatasetVersion{}, fmt.Errorf("lock dataset for finalization: %w", err)
+	}
+	if deletedAt != nil || datasetState == "DELETED" {
+		return DatasetVersion{}, ErrDatasetDeleted
+	}
+	if sessionID != uuid.Nil {
+		var sessionState string
+		var currentToken *uuid.UUID
+		if err := tx.QueryRow(ctx, `SELECT state, operation_token FROM upload_sessions WHERE id = $1 AND dataset_id = $2 AND version_id = $3 FOR UPDATE`, sessionID, datasetID, versionID).Scan(&sessionState, &currentToken); err != nil {
+			if errors.Is(err, pgx.ErrNoRows) {
+				return DatasetVersion{}, ErrVersionState
+			}
+			return DatasetVersion{}, fmt.Errorf("lock multipart session for finalization: %w", err)
+		}
+		if sessionState != "COMPLETING" || currentToken == nil || *currentToken != operationToken {
+			return DatasetVersion{}, ErrVersionState
+		}
+	}
 	var state string
 	if err := tx.QueryRow(ctx, `SELECT state FROM dataset_versions WHERE id = $1 AND dataset_id = $2 FOR UPDATE`, versionID, datasetID).Scan(&state); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -111,10 +144,14 @@ func (r *Repository) FinalizeVersion(ctx context.Context, datasetID, versionID, 
 	if _, err := tx.Exec(ctx, `UPDATE dataset_versions SET state = 'AVAILABLE', size_bytes = $1, checksum_sha256 = $2, available_at = NOW() WHERE id = $3`, size, checksum, versionID); err != nil {
 		return DatasetVersion{}, fmt.Errorf("finalize dataset version: %w", err)
 	}
-	if _, err := tx.Exec(ctx, `UPDATE datasets SET state = 'AVAILABLE', updated_at = NOW() WHERE id = $1`, datasetID); err != nil {
+	if _, err := tx.Exec(ctx, `UPDATE datasets SET state = 'AVAILABLE', updated_at = NOW() WHERE id = $1 AND deleted_at IS NULL`, datasetID); err != nil {
 		return DatasetVersion{}, fmt.Errorf("mark dataset available: %w", err)
 	}
-	if _, err := tx.Exec(ctx, `INSERT INTO dataset_state_history (dataset_id, from_state, to_state, reason, actor_user_id) VALUES ($1, 'UPLOADING', 'AVAILABLE', 'version_upload_completed', $2)`, datasetID, actorID); err != nil {
+	var actor any
+	if actorID != uuid.Nil {
+		actor = actorID
+	}
+	if _, err := tx.Exec(ctx, `INSERT INTO dataset_state_history (dataset_id, from_state, to_state, reason, actor_user_id) VALUES ($1, 'UPLOADING', 'AVAILABLE', 'version_upload_completed', $2)`, datasetID, actor); err != nil {
 		return DatasetVersion{}, fmt.Errorf("record upload completion history: %w", err)
 	}
 	version, err := scanVersion(tx.QueryRow(ctx, versionSelect+`WHERE v.id = $1`, versionID), false)
@@ -133,6 +170,13 @@ func (r *Repository) AbortVersion(ctx context.Context, datasetID, versionID, act
 		return fmt.Errorf("begin version abort: %w", err)
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
+	var datasetState string
+	if err := tx.QueryRow(ctx, `SELECT state FROM datasets WHERE id = $1 FOR UPDATE`, datasetID).Scan(&datasetState); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return ErrDatasetNotFound
+		}
+		return fmt.Errorf("lock dataset for abort: %w", err)
+	}
 	var state string
 	if err := tx.QueryRow(ctx, `SELECT state FROM dataset_versions WHERE id = $1 AND dataset_id = $2 FOR UPDATE`, versionID, datasetID).Scan(&state); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -146,11 +190,13 @@ func (r *Repository) AbortVersion(ctx context.Context, datasetID, versionID, act
 	if _, err := tx.Exec(ctx, `DELETE FROM dataset_versions WHERE id = $1`, versionID); err != nil {
 		return fmt.Errorf("delete staged version: %w", err)
 	}
-	var nextState string
-	if err := tx.QueryRow(ctx, `SELECT CASE WHEN EXISTS (SELECT 1 FROM dataset_versions WHERE dataset_id = $1 AND state = 'AVAILABLE') THEN 'AVAILABLE' ELSE 'REGISTERED' END`, datasetID).Scan(&nextState); err != nil {
-		return fmt.Errorf("restore dataset state: %w", err)
+	nextState := datasetState
+	if datasetState != "DELETED" {
+		if err := tx.QueryRow(ctx, `SELECT CASE WHEN EXISTS (SELECT 1 FROM dataset_versions WHERE dataset_id = $1 AND state = 'AVAILABLE') THEN 'AVAILABLE' ELSE 'REGISTERED' END`, datasetID).Scan(&nextState); err != nil {
+			return fmt.Errorf("restore dataset state: %w", err)
+		}
 	}
-	if _, err := tx.Exec(ctx, `UPDATE datasets SET state = $1, updated_at = NOW() WHERE id = $2`, nextState, datasetID); err != nil {
+	if _, err := tx.Exec(ctx, `UPDATE datasets SET state = $1, updated_at = NOW() WHERE id = $2 AND state <> 'DELETED'`, nextState, datasetID); err != nil {
 		return fmt.Errorf("update aborted dataset state: %w", err)
 	}
 	var actor any
@@ -172,6 +218,13 @@ func (r *Repository) FailVersion(ctx context.Context, datasetID, versionID, acto
 		return fmt.Errorf("begin version failure: %w", err)
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
+	var datasetState string
+	if err := tx.QueryRow(ctx, `SELECT state FROM datasets WHERE id = $1 FOR UPDATE`, datasetID).Scan(&datasetState); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return ErrDatasetNotFound
+		}
+		return fmt.Errorf("lock dataset for failure: %w", err)
+	}
 	var state string
 	if err := tx.QueryRow(ctx, `SELECT state FROM dataset_versions WHERE id = $1 AND dataset_id = $2 FOR UPDATE`, versionID, datasetID).Scan(&state); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -188,18 +241,20 @@ func (r *Repository) FailVersion(ctx context.Context, datasetID, versionID, acto
 	if _, err := tx.Exec(ctx, `UPDATE dataset_versions SET state = 'FAILED' WHERE id = $1`, versionID); err != nil {
 		return fmt.Errorf("mark dataset version failed: %w", err)
 	}
-	var nextDatasetState string
-	if err := tx.QueryRow(ctx, `SELECT CASE WHEN EXISTS (SELECT 1 FROM dataset_versions WHERE dataset_id = $1 AND state = 'AVAILABLE') THEN 'AVAILABLE' ELSE 'REGISTERED' END`, datasetID).Scan(&nextDatasetState); err != nil {
-		return fmt.Errorf("restore dataset state after version failure: %w", err)
+	nextDatasetState := datasetState
+	if datasetState != "DELETED" {
+		if err := tx.QueryRow(ctx, `SELECT CASE WHEN EXISTS (SELECT 1 FROM dataset_versions WHERE dataset_id = $1 AND state = 'AVAILABLE') THEN 'AVAILABLE' ELSE 'REGISTERED' END`, datasetID).Scan(&nextDatasetState); err != nil {
+			return fmt.Errorf("restore dataset state after version failure: %w", err)
+		}
 	}
-	if _, err := tx.Exec(ctx, `UPDATE datasets SET state = $1, updated_at = NOW() WHERE id = $2`, nextDatasetState, datasetID); err != nil {
+	if _, err := tx.Exec(ctx, `UPDATE datasets SET state = $1, updated_at = NOW() WHERE id = $2 AND state <> 'DELETED'`, nextDatasetState, datasetID); err != nil {
 		return fmt.Errorf("update dataset after version failure: %w", err)
 	}
 	var actor any
 	if actorID != uuid.Nil {
 		actor = actorID
 	}
-	if _, err := tx.Exec(ctx, `INSERT INTO dataset_state_history (dataset_id, from_state, to_state, reason, actor_user_id) VALUES ($1, 'UPLOADING', 'FAILED', $2, $3)`, datasetID, truncateStateReason(reason), actor); err != nil {
+	if _, err := tx.Exec(ctx, `INSERT INTO dataset_state_history (dataset_id, from_state, to_state, reason, actor_user_id) VALUES ($1, 'UPLOADING', $2, $3, $4)`, datasetID, nextDatasetState, truncateStateReason(reason), actor); err != nil {
 		return fmt.Errorf("record version failure history: %w", err)
 	}
 	if err := tx.Commit(ctx); err != nil {

@@ -52,6 +52,7 @@ type Config struct {
 	MinIOAccessKey           string
 	MinIOSecretKey           string
 	MinIOSecure              bool
+	MinIOPublicSecure        bool
 	DatasetBucket            string
 	MaxUploadBytes           int64
 	MultipartPartSize        int64
@@ -152,6 +153,14 @@ func Load(getenv func(string) string) (Config, error) {
 			return Config{}, errors.New("MINIO_SECURE must be true or false")
 		}
 		cfg.MinIOSecure = secure
+	}
+	cfg.MinIOPublicSecure = cfg.MinIOSecure
+	if raw := getenv("MINIO_PUBLIC_SECURE"); raw != "" {
+		publicSecure, parseErr := strconv.ParseBool(raw)
+		if parseErr != nil {
+			return Config{}, errors.New("MINIO_PUBLIC_SECURE must be true or false")
+		}
+		cfg.MinIOPublicSecure = publicSecure
 	}
 	if raw := getenv("PIPEFORGE_MAX_UPLOAD_BYTES"); raw != "" {
 		maxBytes, parseErr := strconv.ParseInt(raw, 10, 64)

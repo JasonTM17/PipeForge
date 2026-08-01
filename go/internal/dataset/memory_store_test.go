@@ -141,6 +141,10 @@ func (s *memoryDatasetStore) FinalizeVersion(_ context.Context, datasetID, versi
 	return version, nil
 }
 
+func (s *memoryDatasetStore) FinalizeVersionForUpload(ctx context.Context, datasetID, versionID, actorID uuid.UUID, size int64, checksum string, _, _ uuid.UUID) (DatasetVersion, error) {
+	return s.FinalizeVersion(ctx, datasetID, versionID, actorID, size, checksum)
+}
+
 func (s *memoryDatasetStore) FindVersion(_ context.Context, datasetID, versionID uuid.UUID) (DatasetVersion, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()

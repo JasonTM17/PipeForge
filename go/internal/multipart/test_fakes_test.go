@@ -16,9 +16,10 @@ import (
 )
 
 type fakeDatasetStore struct {
-	mu       sync.Mutex
-	datasets map[uuid.UUID]dataset.Dataset
-	versions map[uuid.UUID]dataset.DatasetVersion
+	mu              sync.Mutex
+	datasets        map[uuid.UUID]dataset.Dataset
+	versions        map[uuid.UUID]dataset.DatasetVersion
+	abortVersionErr error
 }
 
 func newFakeDatasetStore(ownerID uuid.UUID) (*fakeDatasetStore, dataset.Dataset) {
@@ -122,6 +123,10 @@ func (s *fakeDatasetStore) FinalizeVersion(_ context.Context, datasetID, version
 	return version, nil
 }
 
+func (s *fakeDatasetStore) FinalizeVersionForUpload(ctx context.Context, datasetID, versionID, actorID uuid.UUID, size int64, checksum string, _, _ uuid.UUID) (dataset.DatasetVersion, error) {
+	return s.FinalizeVersion(ctx, datasetID, versionID, actorID, size, checksum)
+}
+
 func (s *fakeDatasetStore) FailVersion(_ context.Context, datasetID, versionID, _ uuid.UUID, _ string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -146,6 +151,9 @@ func (s *fakeDatasetStore) FailVersion(_ context.Context, datasetID, versionID, 
 func (s *fakeDatasetStore) AbortVersion(_ context.Context, datasetID, versionID, _ uuid.UUID) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if s.abortVersionErr != nil {
+		return s.abortVersionErr
+	}
 	if _, ok := s.versions[versionID]; !ok {
 		return dataset.ErrVersionNotFound
 	}
@@ -169,9 +177,10 @@ func (s *fakeDatasetStore) ListVersions(_ context.Context, datasetID uuid.UUID) 
 }
 
 type fakeSessionStore struct {
-	mu       sync.Mutex
-	sessions map[uuid.UUID]Session
-	parts    map[uuid.UUID]map[int]Part
+	mu           sync.Mutex
+	sessions     map[uuid.UUID]Session
+	parts        map[uuid.UUID]map[int]Part
+	createErrors []error
 }
 
 func newFakeSessionStore() *fakeSessionStore {
@@ -181,6 +190,13 @@ func newFakeSessionStore() *fakeSessionStore {
 func (s *fakeSessionStore) CreateSession(_ context.Context, session Session) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if len(s.createErrors) > 0 {
+		err := s.createErrors[0]
+		s.createErrors = s.createErrors[1:]
+		if err != nil {
+			return err
+		}
+	}
 	for _, existing := range s.sessions {
 		if session.IdempotencyKey != "" && existing.OwnerUserID == session.OwnerUserID && existing.DatasetID == session.DatasetID && existing.IdempotencyKey == session.IdempotencyKey && existing.State != StateAborted && existing.State != StateExpired && existing.State != StateFailed {
 			return ErrIdempotencyConflict
@@ -250,7 +266,7 @@ func (s *fakeSessionStore) RegisterPart(_ context.Context, sessionID uuid.UUID, 
 	return part, nil
 }
 
-func (s *fakeSessionStore) BeginComplete(_ context.Context, sessionID, ownerID uuid.UUID, now time.Time) (Session, error) {
+func (s *fakeSessionStore) BeginComplete(_ context.Context, sessionID, ownerID uuid.UUID, now, staleBefore time.Time) (Session, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	session, err := s.findSession(sessionID)
@@ -263,7 +279,9 @@ func (s *fakeSessionStore) BeginComplete(_ context.Context, sessionID, ownerID u
 	case StateAborted, StateExpired, StateFailed, StateAborting:
 		return Session{}, ErrSessionState
 	case StateCompleting:
-		return session, nil
+		if session.OperationToken != nil && session.CompletionStartedAt != nil && session.CompletionStartedAt.After(staleBefore) {
+			return session, ErrSessionInProgress
+		}
 	case StateInitiated:
 		if !now.Before(session.ExpiresAt) {
 			session.State = StateAborting
@@ -271,12 +289,29 @@ func (s *fakeSessionStore) BeginComplete(_ context.Context, sessionID, ownerID u
 			s.sessions[sessionID] = session
 			return Session{}, ErrSessionExpired
 		}
-		session.State, session.UpdatedAt = StateCompleting, now
-		s.sessions[sessionID] = session
-		return session, nil
 	default:
 		return Session{}, ErrSessionState
 	}
+	operationToken := uuid.New()
+	session.State, session.UpdatedAt, session.OperationToken, session.CompletionStartedAt = StateCompleting, now, &operationToken, &now
+	s.sessions[sessionID] = session
+	return session, nil
+}
+
+func (s *fakeSessionStore) BeginReconciliation(_ context.Context, sessionID uuid.UUID, now time.Time) (Session, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	session, err := s.findSession(sessionID)
+	if err != nil {
+		return Session{}, err
+	}
+	if session.State != StateAborting {
+		return Session{}, ErrSessionState
+	}
+	operationToken := uuid.New()
+	session.State, session.UpdatedAt, session.OperationToken, session.CompletionStartedAt = StateCompleting, now, &operationToken, &now
+	s.sessions[sessionID] = session
+	return session, nil
 }
 
 func (s *fakeSessionStore) BeginAbort(_ context.Context, sessionID, ownerID uuid.UUID, now time.Time) (Session, error) {
@@ -302,22 +337,22 @@ func (s *fakeSessionStore) BeginAbort(_ context.Context, sessionID, ownerID uuid
 	}
 }
 
-func (s *fakeSessionStore) ResetCompletion(_ context.Context, sessionID uuid.UUID, lastError string) error {
+func (s *fakeSessionStore) ResetCompletion(_ context.Context, sessionID, operationToken uuid.UUID, lastError string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	session, err := s.findSession(sessionID)
 	if err != nil {
 		return err
 	}
-	if session.State != StateCompleting {
+	if session.State != StateCompleting || session.OperationToken == nil || *session.OperationToken != operationToken {
 		return ErrSessionState
 	}
-	session.State, session.LastError = StateInitiated, stringPointer(lastError)
+	session.State, session.LastError, session.OperationToken, session.CompletionStartedAt = StateInitiated, stringPointer(lastError), nil, nil
 	s.sessions[sessionID] = session
 	return nil
 }
 
-func (s *fakeSessionStore) MarkCompleted(_ context.Context, sessionID uuid.UUID, at time.Time) error {
+func (s *fakeSessionStore) MarkCompleted(_ context.Context, sessionID, operationToken uuid.UUID, at time.Time) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	session, err := s.findSession(sessionID)
@@ -327,10 +362,10 @@ func (s *fakeSessionStore) MarkCompleted(_ context.Context, sessionID uuid.UUID,
 	if session.State == StateCompleted {
 		return nil
 	}
-	if session.State != StateCompleting {
+	if session.State != StateCompleting || session.OperationToken == nil || *session.OperationToken != operationToken {
 		return ErrSessionState
 	}
-	session.State, session.CompletedAt, session.UpdatedAt = StateCompleted, &at, at
+	session.State, session.CompletedAt, session.UpdatedAt, session.OperationToken, session.CompletionStartedAt = StateCompleted, &at, at, nil, nil
 	s.sessions[sessionID] = session
 	return nil
 }
@@ -353,17 +388,17 @@ func (s *fakeSessionStore) MarkAborted(_ context.Context, sessionID uuid.UUID, a
 	return nil
 }
 
-func (s *fakeSessionStore) MarkFailed(_ context.Context, sessionID uuid.UUID, lastError string) error {
+func (s *fakeSessionStore) MarkFailed(_ context.Context, sessionID, operationToken uuid.UUID, lastError string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	session, err := s.findSession(sessionID)
 	if err != nil {
 		return err
 	}
-	if session.State == StateCompleted {
+	if session.State == StateCompleted || (session.State == StateCompleting && (session.OperationToken == nil || *session.OperationToken != operationToken)) || (session.State != StateCompleting && operationToken != uuid.Nil) {
 		return ErrSessionState
 	}
-	session.State, session.LastError = StateFailed, stringPointer(lastError)
+	session.State, session.LastError, session.OperationToken, session.CompletionStartedAt = StateFailed, stringPointer(lastError), nil, nil
 	s.sessions[sessionID] = session
 	return nil
 }
@@ -376,7 +411,7 @@ func (s *fakeSessionStore) ClaimExpired(_ context.Context, now, completionStaleB
 		if len(claimed) >= limit || session.ExpiresAt.After(now) || (session.State != StateInitiated && session.State != StateCompleting && session.State != StateAborting) || (session.State == StateCompleting && session.UpdatedAt.After(completionStaleBefore)) {
 			continue
 		}
-		session.State, session.UpdatedAt, session.LastError = StateAborting, now, stringPointer("session_expired")
+		session.State, session.UpdatedAt, session.LastError, session.OperationToken, session.CompletionStartedAt = StateAborting, now, stringPointer("session_expired"), nil, nil
 		s.sessions[id] = session
 		claimed = append(claimed, session)
 	}
@@ -409,11 +444,12 @@ func (s *fakeSessionStore) findSession(sessionID uuid.UUID) (Session, error) {
 func stringPointer(value string) *string { return &value }
 
 type fakeObjectStore struct {
-	mu      sync.Mutex
-	objects map[string][]byte
-	uploads map[string]*fakeMultipartUpload
-	nextID  int
-	headErr error
+	mu                sync.Mutex
+	objects           map[string][]byte
+	uploads           map[string]*fakeMultipartUpload
+	nextID            int
+	headErr           error
+	abortMultipartErr error
 }
 
 type fakeMultipartUpload struct {
@@ -512,6 +548,20 @@ func (s *fakeObjectStore) ListMultipartParts(_ context.Context, key, uploadID st
 	return parts, nil
 }
 
+func (s *fakeObjectStore) GetMultipartPart(_ context.Context, key, uploadID string, partNumber int) (storage.MultipartPart, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	upload, ok := s.uploads[uploadID]
+	if !ok || upload.Key != key {
+		return storage.MultipartPart{}, errors.New("multipart upload not found")
+	}
+	part, ok := upload.Parts[partNumber]
+	if !ok {
+		return storage.MultipartPart{}, storage.ErrMultipartPartNotFound
+	}
+	return part, nil
+}
+
 func (s *fakeObjectStore) CompleteMultipart(_ context.Context, key, uploadID string, parts []storage.MultipartPart, contentType string) (storage.ObjectInfo, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -535,6 +585,9 @@ func (s *fakeObjectStore) CompleteMultipart(_ context.Context, key, uploadID str
 func (s *fakeObjectStore) AbortMultipart(_ context.Context, _, uploadID string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if s.abortMultipartErr != nil {
+		return s.abortMultipartErr
+	}
 	delete(s.uploads, uploadID)
 	return nil
 }

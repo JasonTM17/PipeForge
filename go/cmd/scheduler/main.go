@@ -33,7 +33,7 @@ func run(ctx context.Context) error {
 	defer pool.Close()
 	objectStore, err := storage.NewMinIO(storage.MinIOConfig{
 		Endpoint: cfg.MinIOEndpoint, PublicEndpoint: cfg.MinIOPublicEndpoint, AccessKey: cfg.MinIOAccessKey, SecretKey: cfg.MinIOSecretKey,
-		Secure: cfg.MinIOSecure, Bucket: cfg.DatasetBucket,
+		Secure: cfg.MinIOSecure, PublicSecure: cfg.MinIOPublicSecure, Bucket: cfg.DatasetBucket,
 	})
 	if err != nil {
 		return err
@@ -51,7 +51,7 @@ func run(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	slog.Info("multipart cleanup completed", "claimed", report.Claimed, "expired", report.Expired, "failed", report.Failed)
+	slog.Info("multipart cleanup completed", "claimed", report.Claimed, "expired", report.Expired, "reconciled", report.Reconciled, "failed", report.Failed)
 	if len(report.Failures) > 0 {
 		return fmt.Errorf("multipart cleanup completed with %d failures", len(report.Failures))
 	}

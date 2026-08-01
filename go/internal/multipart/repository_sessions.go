@@ -16,7 +16,7 @@ const sessionSelect = `
 SELECT id, owner_user_id, dataset_id, version_id, upload_id, object_key, state,
        original_filename, content_type, format, expected_size, expected_checksum_sha256,
        part_size, part_count, idempotency_key, expires_at, created_at, updated_at,
-       completed_at, aborted_at, last_error
+       completed_at, aborted_at, last_error, operation_token, completion_started_at
 FROM upload_sessions `
 
 func (r *Repository) CreateSession(ctx context.Context, session Session) error {
@@ -55,7 +55,7 @@ func (r *Repository) FindActiveByIdempotency(ctx context.Context, ownerID, datas
 	return r.findSession(ctx, sessionSelect+`WHERE owner_user_id = $1 AND dataset_id = $2 AND idempotency_key = $3 AND state IN ('INITIATED', 'COMPLETING', 'ABORTING', 'COMPLETED')`, ownerID, datasetID, key)
 }
 
-func (r *Repository) BeginComplete(ctx context.Context, sessionID, ownerID uuid.UUID, now time.Time) (Session, error) {
+func (r *Repository) BeginComplete(ctx context.Context, sessionID, ownerID uuid.UUID, now, staleBefore time.Time) (Session, error) {
 	tx, err := r.pool.Begin(ctx)
 	if err != nil {
 		return Session{}, fmt.Errorf("begin multipart completion: %w", err)
@@ -74,10 +74,12 @@ func (r *Repository) BeginComplete(ctx context.Context, sessionID, ownerID uuid.
 	case StateAborted, StateExpired, StateFailed, StateAborting:
 		return session, ErrSessionState
 	case StateCompleting:
-		return session, nil
+		if session.OperationToken != nil && session.CompletionStartedAt != nil && session.CompletionStartedAt.After(staleBefore) {
+			return session, ErrSessionInProgress
+		}
 	case StateInitiated:
 		if !now.Before(session.ExpiresAt) {
-			if _, err := tx.Exec(ctx, `UPDATE upload_sessions SET state = 'ABORTING', updated_at = $2, last_error = 'session_expired' WHERE id = $1`, sessionID, now); err != nil {
+			if _, err := tx.Exec(ctx, `UPDATE upload_sessions SET state = 'ABORTING', updated_at = $2, last_error = 'session_expired', operation_token = NULL, completion_started_at = NULL WHERE id = $1`, sessionID, now); err != nil {
 				return Session{}, fmt.Errorf("claim expired multipart session: %w", err)
 			}
 			if err := tx.Commit(ctx); err != nil {
@@ -88,7 +90,8 @@ func (r *Repository) BeginComplete(ctx context.Context, sessionID, ownerID uuid.
 	default:
 		return Session{}, ErrSessionState
 	}
-	if _, err := tx.Exec(ctx, `UPDATE upload_sessions SET state = 'COMPLETING', updated_at = $2 WHERE id = $1`, sessionID, now); err != nil {
+	operationToken := uuid.New()
+	if _, err := tx.Exec(ctx, `UPDATE upload_sessions SET state = 'COMPLETING', updated_at = $2, operation_token = $3, completion_started_at = $2 WHERE id = $1`, sessionID, now, operationToken); err != nil {
 		return Session{}, fmt.Errorf("mark multipart session completing: %w", err)
 	}
 	if err := tx.Commit(ctx); err != nil {
@@ -96,6 +99,8 @@ func (r *Repository) BeginComplete(ctx context.Context, sessionID, ownerID uuid.
 	}
 	session.State = StateCompleting
 	session.UpdatedAt = now
+	session.OperationToken = &operationToken
+	session.CompletionStartedAt = &now
 	return session, nil
 }
 
@@ -136,8 +141,38 @@ func (r *Repository) BeginAbort(ctx context.Context, sessionID, ownerID uuid.UUI
 	return session, nil
 }
 
-func (r *Repository) ResetCompletion(ctx context.Context, sessionID uuid.UUID, lastError string) error {
-	result, err := r.pool.Exec(ctx, `UPDATE upload_sessions SET state = 'INITIATED', updated_at = NOW(), last_error = $2 WHERE id = $1 AND state = 'COMPLETING'`, sessionID, truncateError(lastError))
+func (r *Repository) BeginReconciliation(ctx context.Context, sessionID uuid.UUID, now time.Time) (Session, error) {
+	tx, err := r.pool.Begin(ctx)
+	if err != nil {
+		return Session{}, fmt.Errorf("begin multipart reconciliation: %w", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	session, err := scanSession(tx.QueryRow(ctx, sessionSelect+`WHERE id = $1 FOR UPDATE`, sessionID))
+	if errors.Is(err, pgx.ErrNoRows) {
+		return Session{}, ErrSessionNotFound
+	}
+	if err != nil {
+		return Session{}, fmt.Errorf("lock multipart reconciliation: %w", err)
+	}
+	if session.State != StateAborting {
+		return Session{}, ErrSessionState
+	}
+	operationToken := uuid.New()
+	if _, err := tx.Exec(ctx, `UPDATE upload_sessions SET state = 'COMPLETING', updated_at = $2, operation_token = $3, completion_started_at = $2 WHERE id = $1 AND state = 'ABORTING'`, sessionID, now, operationToken); err != nil {
+		return Session{}, fmt.Errorf("claim multipart reconciliation: %w", err)
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return Session{}, fmt.Errorf("commit multipart reconciliation: %w", err)
+	}
+	session.State = StateCompleting
+	session.UpdatedAt = now
+	session.OperationToken = &operationToken
+	session.CompletionStartedAt = &now
+	return session, nil
+}
+
+func (r *Repository) ResetCompletion(ctx context.Context, sessionID, operationToken uuid.UUID, lastError string) error {
+	result, err := r.pool.Exec(ctx, `UPDATE upload_sessions SET state = 'INITIATED', updated_at = NOW(), last_error = $3, operation_token = NULL, completion_started_at = NULL WHERE id = $1 AND state = 'COMPLETING' AND operation_token = $2`, sessionID, operationToken, truncateError(lastError))
 	if err != nil {
 		return fmt.Errorf("reset multipart completion: %w", err)
 	}
@@ -147,8 +182,8 @@ func (r *Repository) ResetCompletion(ctx context.Context, sessionID uuid.UUID, l
 	return nil
 }
 
-func (r *Repository) MarkCompleted(ctx context.Context, sessionID uuid.UUID, completedAt time.Time) error {
-	result, err := r.pool.Exec(ctx, `UPDATE upload_sessions SET state = 'COMPLETED', updated_at = $2, completed_at = $2, last_error = NULL WHERE id = $1 AND state = 'COMPLETING'`, sessionID, completedAt)
+func (r *Repository) MarkCompleted(ctx context.Context, sessionID, operationToken uuid.UUID, completedAt time.Time) error {
+	result, err := r.pool.Exec(ctx, `UPDATE upload_sessions SET state = 'COMPLETED', updated_at = $3, completed_at = $3, last_error = NULL, operation_token = NULL, completion_started_at = NULL WHERE id = $1 AND state = 'COMPLETING' AND operation_token = $2`, sessionID, operationToken, completedAt)
 	if err != nil {
 		return fmt.Errorf("mark multipart session completed: %w", err)
 	}
@@ -169,8 +204,8 @@ func (r *Repository) MarkAborted(ctx context.Context, sessionID uuid.UUID, abort
 	return nil
 }
 
-func (r *Repository) MarkFailed(ctx context.Context, sessionID uuid.UUID, lastError string) error {
-	result, err := r.pool.Exec(ctx, `UPDATE upload_sessions SET state = 'FAILED', updated_at = NOW(), last_error = $2 WHERE id = $1 AND state <> 'COMPLETED'`, sessionID, truncateError(lastError))
+func (r *Repository) MarkFailed(ctx context.Context, sessionID, operationToken uuid.UUID, lastError string) error {
+	result, err := r.pool.Exec(ctx, `UPDATE upload_sessions SET state = 'FAILED', updated_at = NOW(), last_error = $3, operation_token = NULL, completion_started_at = NULL WHERE id = $1 AND state <> 'COMPLETED' AND ((state = 'COMPLETING' AND operation_token = $2) OR (state = 'ABORTING' AND $2 = '00000000-0000-0000-0000-000000000000'))`, sessionID, operationToken, truncateError(lastError))
 	if err != nil {
 		return fmt.Errorf("mark multipart session failed: %w", err)
 	}
@@ -192,7 +227,7 @@ WITH claimed AS (
     LIMIT $3
 )
 UPDATE upload_sessions s
-SET state = 'ABORTING', updated_at = $1, last_error = 'session_expired'
+SET state = 'ABORTING', updated_at = $1, last_error = 'session_expired', operation_token = NULL, completion_started_at = NULL
 FROM claimed
 WHERE s.id = claimed.id
 RETURNING s.id`, now, completionStaleBefore, limit)
@@ -249,11 +284,13 @@ func scanSession(row interface{ Scan(...any) error }) (Session, error) {
 	var session Session
 	var format string
 	var expectedChecksum, idempotencyKey, lastError *string
+	var operationToken *uuid.UUID
+	var completionStartedAt *time.Time
 	err := row.Scan(
 		&session.ID, &session.OwnerUserID, &session.DatasetID, &session.VersionID, &session.UploadID, &session.ObjectKey,
 		&session.State, &session.OriginalFilename, &session.ContentType, &format, &session.ExpectedSize, &expectedChecksum,
 		&session.PartSize, &session.PartCount, &idempotencyKey, &session.ExpiresAt, &session.CreatedAt, &session.UpdatedAt,
-		&session.CompletedAt, &session.AbortedAt, &lastError,
+		&session.CompletedAt, &session.AbortedAt, &lastError, &operationToken, &completionStartedAt,
 	)
 	if err != nil {
 		return Session{}, err
@@ -268,6 +305,8 @@ func scanSession(row interface{ Scan(...any) error }) (Session, error) {
 	if lastError != nil {
 		session.LastError = lastError
 	}
+	session.OperationToken = operationToken
+	session.CompletionStartedAt = completionStartedAt
 	return session, nil
 }
 

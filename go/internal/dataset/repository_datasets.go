@@ -113,6 +113,13 @@ func (r *Repository) DeleteDataset(ctx context.Context, datasetID, actorID uuid.
 	if _, err := tx.Exec(ctx, `UPDATE datasets SET state = 'DELETED', deleted_at = COALESCE(deleted_at, NOW()), updated_at = NOW() WHERE id = $1`, datasetID); err != nil {
 		return fmt.Errorf("delete dataset: %w", err)
 	}
+	if _, err := tx.Exec(ctx, `
+UPDATE upload_sessions
+SET state = 'ABORTING', expires_at = LEAST(expires_at, NOW()), updated_at = NOW(),
+    last_error = 'dataset_deleted', operation_token = NULL, completion_started_at = NULL
+WHERE dataset_id = $1 AND state IN ('INITIATED', 'COMPLETING', 'ABORTING')`, datasetID); err != nil {
+		return fmt.Errorf("cancel active multipart sessions for deleted dataset: %w", err)
+	}
 	if _, err := tx.Exec(ctx, `INSERT INTO dataset_state_history (dataset_id, from_state, to_state, reason, actor_user_id) VALUES ($1, $2, 'DELETED', 'dataset_deleted', $3)`, datasetID, state, actorID); err != nil {
 		return fmt.Errorf("record dataset deletion history: %w", err)
 	}

@@ -56,19 +56,22 @@ Complete the large-file upload path with upload sessions, presigned part URLs, p
 - API lifecycle tests with duplicate/reordered requests
 - cleanup command smoke test against expired fixture sessions
 
-Verified 2026-08-01:
+Verified 2026-08-01 (baseline and hardening):
 
 - `go test ./...`, `go vet ./...`, and `go test -race ./...` passed in the Go 1.23 container.
 - Tagged MinIO multipart integration passed against the Compose MinIO service.
 - API smoke completed a two-part upload through host-reachable presigned URLs and promoted an `AVAILABLE` version.
 - Scheduler smoke expired one generated fixture, failed its staged version, and passed an immediate idempotent rerun.
 - `docker compose config --quiet`, OpenAPI YAML parsing, and docs validation passed.
+- Operation tokens fence completion, reset, failure, reconciliation, and version promotion; dataset deletion cancels active multipart sessions under the same dataset lock.
+- Cleanup reconciles a valid completed object into an available version, retries transient object-store errors, and persists initiation-compensation orphans for scheduler recovery.
+- Internal and public MinIO endpoints have independent TLS settings; production Compose requires an explicit public endpoint.
 
 ## Risk Assessment
 
 - Risk: remote completion succeeds while DB transaction fails. Mitigation: reconcile by verifying final object and retrying metadata promotion; never delete a known successful object blindly.
 - Risk: client retries create duplicate sessions. Mitigation: optional idempotency key on initiation and unique active-session constraint per request fingerprint.
-- Risk: cleanup races with a slow completion or transient MinIO outage. Mitigation: stale-completion grace window, explicit not-found classification, bounded retryable failures, and quarantine of an already completed object for reconciliation.
+- Risk: cleanup races with a slow completion or transient MinIO outage. Mitigation: operation-token fencing, stale-completion grace window, explicit not-found classification, bounded retryable failures, and valid-object reconciliation.
 
 ## Security Considerations
 

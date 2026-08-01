@@ -143,14 +143,21 @@ func (s *Service) Initiate(ctx context.Context, principal auth.Principal, datase
 		session.ExpectedChecksum = &expectedChecksum
 	}
 	if err := s.Sessions.CreateSession(ctx, session); err != nil {
-		cleanupErr := s.cleanupReservedRemote(ctx, datasetID, versionID, principal.UserID, objectKey, uploadID, err)
+		cleanupErr := s.cleanupReservedRemote(ctx, objectKey, uploadID, datasetID, versionID, principal.UserID)
+		if cleanupErr != nil {
+			orphanErr := s.persistOrphanSession(ctx, session, now, "initiation_compensation_failed")
+			return Session{}, errors.Join(err, cleanupErr, orphanErr)
+		}
 		if errors.Is(err, ErrIdempotencyConflict) && idempotencyKey != "" {
 			existing, lookupErr := s.Sessions.FindActiveByIdempotency(ctx, principal.UserID, datasetID, idempotencyKey)
 			if lookupErr == nil && sameInitiateRequest(existing, filename, contentType, format, request.ExpectedSize, checksum) {
 				return existing, nil
 			}
+			if lookupErr != nil {
+				return Session{}, errors.Join(err, lookupErr)
+			}
 		}
-		return Session{}, cleanupErr
+		return Session{}, err
 	}
 	return session, nil
 }
@@ -245,19 +252,12 @@ func (s *Service) RegisterPart(ctx context.Context, principal auth.Principal, se
 	} else if !errors.Is(lookupErr, ErrPartNotFound) {
 		return Part{}, lookupErr
 	}
-	remoteParts, err := s.Multipart.ListMultipartParts(ctx, session.ObjectKey, session.UploadID)
+	remotePart, err := s.Multipart.GetMultipartPart(ctx, session.ObjectKey, session.UploadID, partNumber)
 	if err != nil {
-		return Part{}, fmt.Errorf("%w: list remote parts: %v", ErrRemoteStorage, err)
-	}
-	var remotePart *storage.MultipartPart
-	for index := range remoteParts {
-		if remoteParts[index].PartNumber == partNumber {
-			remotePart = &remoteParts[index]
-			break
+		if errors.Is(err, storage.ErrMultipartPartNotFound) {
+			return Part{}, ErrPartNotFound
 		}
-	}
-	if remotePart == nil {
-		return Part{}, ErrPartNotFound
+		return Part{}, fmt.Errorf("%w: list remote parts: %v", ErrRemoteStorage, err)
 	}
 	if strings.Trim(remotePart.ETag, `"`) != normalizedETag || remotePart.Size != size {
 		return Part{}, ErrPartConflict
@@ -277,7 +277,7 @@ func (s *Service) Abort(ctx context.Context, principal auth.Principal, sessionID
 		return err
 	}
 	now := s.now()
-	session, err = s.Sessions.BeginAbort(ctx, sessionID, principal.UserID, now)
+	session, err = s.Sessions.BeginAbort(ctx, sessionID, session.OwnerUserID, now)
 	if err != nil {
 		return err
 	}
@@ -299,10 +299,11 @@ func (s *Service) Abort(ctx context.Context, principal auth.Principal, sessionID
 }
 
 type CleanupReport struct {
-	Claimed  int
-	Expired  int
-	Failed   int
-	Failures []error
+	Claimed    int
+	Expired    int
+	Reconciled int
+	Failed     int
+	Failures   []error
 }
 
 func (s *Service) CleanupExpired(ctx context.Context, limit int) (CleanupReport, error) {
@@ -320,12 +321,12 @@ func (s *Service) CleanupExpired(ctx context.Context, limit int) (CleanupReport,
 	report := CleanupReport{Claimed: len(sessions), Failures: make([]error, 0)}
 	for _, session := range sessions {
 		if _, headErr := s.Objects.Head(ctx, session.ObjectKey); headErr == nil {
-			report.Failed++
-			failure := fmt.Errorf("session %s has a completed object requiring reconciliation", session.ID)
-			if markErr := s.Sessions.MarkFailed(ctx, session.ID, "completed_object_requires_reconciliation"); markErr != nil {
-				failure = errors.Join(failure, markErr)
+			if reconcileErr := s.reconcileCompletedObject(ctx, session, now); reconcileErr != nil {
+				report.Failed++
+				report.Failures = append(report.Failures, fmt.Errorf("session %s reconciliation failed: %w", session.ID, reconcileErr))
+			} else {
+				report.Reconciled++
 			}
-			report.Failures = append(report.Failures, failure)
 			continue
 		} else if !errors.Is(headErr, storage.ErrObjectNotFound) {
 			report.Failed++
@@ -334,6 +335,9 @@ func (s *Service) CleanupExpired(ctx context.Context, limit int) (CleanupReport,
 		}
 		remoteErr := s.Multipart.AbortMultipart(ctx, session.ObjectKey, session.UploadID)
 		versionErr := s.Datasets.FailVersion(ctx, session.DatasetID, session.VersionID, uuid.Nil, "multipart_session_expired")
+		if errors.Is(versionErr, dataset.ErrVersionNotFound) {
+			versionErr = nil
+		}
 		if remoteErr != nil || versionErr != nil {
 			report.Failed++
 			report.Failures = append(report.Failures, errors.Join(remoteErr, versionErr))
@@ -364,8 +368,17 @@ func (s *Service) cleanupReserved(ctx context.Context, datasetID, versionID, act
 	return errors.Join(primary, s.Datasets.AbortVersion(ctx, datasetID, versionID, actorID))
 }
 
-func (s *Service) cleanupReservedRemote(ctx context.Context, datasetID, versionID, actorID uuid.UUID, objectKey, uploadID string, primary error) error {
-	return errors.Join(primary, s.Multipart.AbortMultipart(ctx, objectKey, uploadID), s.Datasets.AbortVersion(ctx, datasetID, versionID, actorID))
+func (s *Service) cleanupReservedRemote(ctx context.Context, objectKey, uploadID string, datasetID, versionID, actorID uuid.UUID) error {
+	return errors.Join(s.Multipart.AbortMultipart(ctx, objectKey, uploadID), s.Datasets.AbortVersion(ctx, datasetID, versionID, actorID))
+}
+
+func (s *Service) persistOrphanSession(ctx context.Context, session Session, now time.Time, reason string) error {
+	session.State = StateAborting
+	session.IdempotencyKey = ""
+	session.ExpiresAt = now
+	session.UpdatedAt = now
+	session.LastError = &reason
+	return s.Sessions.CreateSession(ctx, session)
 }
 
 func (s *Service) requireConfigured() error {

@@ -11,6 +11,7 @@ import (
 
 	"github.com/JasonTM17/PipeForge/go/internal/auth"
 	"github.com/JasonTM17/PipeForge/go/internal/authz"
+	"github.com/JasonTM17/PipeForge/go/internal/storage"
 	"github.com/google/uuid"
 )
 
@@ -141,6 +142,60 @@ func TestServiceCleanupLeavesFreshCompletionClaimableByItsOwner(t *testing.T) {
 	}
 	if report.Claimed != 0 || sessions.sessions[session.ID].State != StateCompleting {
 		t.Fatalf("fresh completion was incorrectly claimed: report=%+v session=%+v", report, sessions.sessions[session.ID])
+	}
+}
+
+func TestServiceCleanupReconcilesCompletedObjectWithoutDeletingIt(t *testing.T) {
+	service, datasets, sessions, objects, principal, datasetID := newMultipartService(t)
+	payload := multipartPayload(service.Config.PartSize + 3)
+	session, etags := prepareSession(t, service, datasets, objects, principal, datasetID, payload, "")
+	if _, err := objects.CompleteMultipart(context.Background(), session.ObjectKey, session.UploadID, []storage.MultipartPart{
+		{PartNumber: 1, ETag: etags[0], Size: int64(service.Config.PartSize)},
+		{PartNumber: 2, ETag: etags[1], Size: int64(len(payload)) - service.Config.PartSize},
+	}, session.ContentType); err != nil {
+		t.Fatalf("failed to create completed remote object: %v", err)
+	}
+	now := time.Now().UTC().Add(2 * time.Hour)
+	session.State, session.ExpiresAt, session.UpdatedAt = StateAborting, now.Add(-time.Minute), now.Add(-2*time.Hour)
+	sessions.sessions[session.ID] = session
+	service.Now = func() time.Time { return now }
+
+	report, err := service.CleanupExpired(context.Background(), 10)
+	if err != nil {
+		t.Fatalf("CleanupExpired returned error: %v", err)
+	}
+	if report.Reconciled != 1 || report.Failed != 0 || sessions.sessions[session.ID].State != StateCompleted {
+		t.Fatalf("completed object was not reconciled: report=%+v session=%+v", report, sessions.sessions[session.ID])
+	}
+	if datasets.versions[session.VersionID].State != "AVAILABLE" {
+		t.Fatalf("reconciled version was not promoted: %+v", datasets.versions[session.VersionID])
+	}
+	if _, err := objects.Head(context.Background(), session.ObjectKey); err != nil {
+		t.Fatalf("valid completed object was deleted: %v", err)
+	}
+}
+
+func TestServiceInitiatePersistsOrphanWhenCompensationFails(t *testing.T) {
+	service, datasets, sessions, objects, principal, datasetID := newMultipartService(t)
+	sessions.createErrors = []error{errors.New("database unavailable"), nil}
+	objects.abortMultipartErr = errors.New("object store unavailable")
+
+	_, err := service.Initiate(context.Background(), principal, datasetID, InitiateRequest{
+		Filename: "events.csv", ContentType: "text/csv", ExpectedSize: service.Config.PartSize,
+	})
+	if err == nil || !strings.Contains(err.Error(), "object store unavailable") {
+		t.Fatalf("expected primary and compensation errors, got %v", err)
+	}
+	if len(sessions.sessions) != 1 {
+		t.Fatalf("compensation failure did not persist an orphan session: %+v", sessions.sessions)
+	}
+	for _, session := range sessions.sessions {
+		if session.State != StateAborting || session.ExpiresAt.After(time.Now().UTC()) || session.IdempotencyKey != "" {
+			t.Fatalf("orphan session is not immediately retryable: %+v", session)
+		}
+	}
+	if len(datasets.versions) != 0 {
+		t.Fatalf("unexpected staged versions after compensation: %+v", datasets.versions)
 	}
 }
 

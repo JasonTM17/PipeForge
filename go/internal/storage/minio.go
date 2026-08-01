@@ -25,6 +25,7 @@ type MinIOConfig struct {
 	AccessKey      string
 	SecretKey      string
 	Secure         bool
+	PublicSecure   bool
 	Bucket         string
 }
 
@@ -47,6 +48,7 @@ func NewMinIO(config MinIOConfig) (*MinIOStore, error) {
 	presignClient := core.Client
 	if strings.TrimSpace(config.PublicEndpoint) != "" && strings.TrimSpace(config.PublicEndpoint) != strings.TrimSpace(config.Endpoint) {
 		presignOptions := *options
+		presignOptions.Secure = config.PublicSecure
 		presignOptions.Region = "us-east-1"
 		publicCore, publicErr := minio.NewCore(config.PublicEndpoint, &presignOptions)
 		if publicErr != nil {
@@ -174,7 +176,7 @@ func (s *MinIOStore) ListMultipartParts(ctx context.Context, key, uploadID strin
 	parts := make([]MultipartPart, 0)
 	marker := 0
 	for {
-		result, err := s.core.ListObjectParts(operationCtx, s.bucket, key, uploadID, marker, 10000)
+		result, err := s.core.ListObjectParts(operationCtx, s.bucket, key, uploadID, marker, 1000)
 		if err != nil {
 			return nil, fmt.Errorf("list multipart parts for %s: %w", key, err)
 		}
@@ -186,6 +188,27 @@ func (s *MinIOStore) ListMultipartParts(ctx context.Context, key, uploadID strin
 		}
 		marker = result.NextPartNumberMarker
 	}
+}
+
+func (s *MinIOStore) GetMultipartPart(ctx context.Context, key, uploadID string, partNumber int) (MultipartPart, error) {
+	if s == nil || s.core == nil {
+		return MultipartPart{}, fmt.Errorf("MinIO store is not configured")
+	}
+	if partNumber < 1 {
+		return MultipartPart{}, fmt.Errorf("multipart part number must be positive")
+	}
+	operationCtx, cancel := context.WithTimeout(nonNilContext(ctx), operationTimeout)
+	defer cancel()
+	result, err := s.core.ListObjectParts(operationCtx, s.bucket, key, uploadID, partNumber-1, 1)
+	if err != nil {
+		return MultipartPart{}, fmt.Errorf("get multipart part %d for %s: %w", partNumber, key, err)
+	}
+	for _, part := range result.ObjectParts {
+		if part.PartNumber == partNumber {
+			return MultipartPart{PartNumber: part.PartNumber, ETag: strings.Trim(part.ETag, `"`), Size: part.Size}, nil
+		}
+	}
+	return MultipartPart{}, ErrMultipartPartNotFound
 }
 
 func (s *MinIOStore) CompleteMultipart(ctx context.Context, key, uploadID string, parts []MultipartPart, contentType string) (ObjectInfo, error) {
