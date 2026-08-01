@@ -1,10 +1,12 @@
 ---
 phase: 13
-title: "Anomaly detection"
-status: pending
+title: Anomaly detection
+status: completed
 priority: P1
-effort: "3d"
-dependencies: [10, 11]
+effort: 3d
+dependencies:
+  - 10
+  - 11
 ---
 
 # Phase 13: Anomaly detection
@@ -25,7 +27,7 @@ Implement configurable IQR, Z-score, and modified Z-score anomaly detection with
 
 ## Related Code Files
 
-- Create: `python/src/pipeforge_worker/anomaly/`, anomaly contracts/reports
+- Create: `python/src/pipeforge_worker/anomaly/`, `anomaly.report.v1`, anomaly reports
 - Create: `python/tests/test_anomaly.py`
 - Modify: operation dispatch, profile/result composition, shared schemas
 - Modify: `docs/performance/chunk-processing.md`
@@ -39,10 +41,10 @@ Implement configurable IQR, Z-score, and modified Z-score anomaly detection with
 
 ## Success Criteria
 
-- [ ] Detector outputs match reference fixtures and are stable across chunk boundaries.
-- [ ] Insufficient/constant data returns a documented skipped/warning result, not a false anomaly storm.
-- [ ] Artifact size/sample bounds are enforced.
-- [ ] Invalid methods/configs are rejected at the contract boundary.
+- [x] Detector outputs match reference fixtures and are stable across chunk boundaries.
+- [x] Insufficient/constant data returns a documented skipped/warning result, not a false anomaly storm.
+- [x] Artifact size/sample bounds are enforced.
+- [x] Invalid methods/configs are rejected at the contract boundary.
 
 ## Validation
 
@@ -61,9 +63,8 @@ Cap sample output, suppress sensitive values, validate thresholds, and keep anom
 
 ## Next Steps
 
-Phase 14 connects worker result events to authoritative Go state and artifact APIs.
+Phase 14 connects worker result events to authoritative Go state and artifact APIs. It will expose authorized anomaly artifacts after result acceptance.
 
 ## Unresolved Questions
 
 - None blocking; Isolation Forest remains a future adapter and is not required for MVP completion.
-
