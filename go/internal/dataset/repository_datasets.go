@@ -55,24 +55,35 @@ func (r *Repository) FindDataset(ctx context.Context, datasetID uuid.UUID) (Data
 
 func (r *Repository) ListDatasets(ctx context.Context, ownerID *uuid.UUID, page, pageSize int, state, name string) (DatasetPage, error) {
 	offset := (page - 1) * pageSize
+	state = strings.TrimSpace(state)
+	name = strings.TrimSpace(name)
+	var total int64
+	if err := r.pool.QueryRow(ctx, `
+SELECT COUNT(*)
+FROM datasets
+WHERE deleted_at IS NULL
+  AND ($1::uuid IS NULL OR owner_user_id = $1)
+  AND ($2 = '' OR state = $2)
+  AND ($3 = '' OR name ILIKE '%' || $3 || '%')`, ownerID, state, name).Scan(&total); err != nil {
+		return DatasetPage{}, fmt.Errorf("count datasets: %w", err)
+	}
 	rows, err := r.pool.Query(ctx, `
-SELECT id, owner_user_id, name, description, state, created_at, updated_at, deleted_at,
-       COUNT(*) OVER ()
+SELECT id, owner_user_id, name, description, state, created_at, updated_at, deleted_at
 FROM datasets
 WHERE deleted_at IS NULL
   AND ($1::uuid IS NULL OR owner_user_id = $1)
   AND ($2 = '' OR state = $2)
   AND ($3 = '' OR name ILIKE '%' || $3 || '%')
 ORDER BY created_at DESC, id
-LIMIT $4 OFFSET $5`, ownerID, strings.TrimSpace(state), strings.TrimSpace(name), pageSize, offset)
+LIMIT $4 OFFSET $5`, ownerID, state, name, pageSize, offset)
 	if err != nil {
 		return DatasetPage{}, fmt.Errorf("list datasets: %w", err)
 	}
 	defer rows.Close()
-	pageResult := DatasetPage{Items: make([]Dataset, 0)}
+	pageResult := DatasetPage{Items: make([]Dataset, 0), Total: total}
 	for rows.Next() {
 		var dataset Dataset
-		if err := rows.Scan(&dataset.ID, &dataset.OwnerUserID, &dataset.Name, &dataset.Description, &dataset.State, &dataset.CreatedAt, &dataset.UpdatedAt, &dataset.DeletedAt, &pageResult.Total); err != nil {
+		if err := rows.Scan(&dataset.ID, &dataset.OwnerUserID, &dataset.Name, &dataset.Description, &dataset.State, &dataset.CreatedAt, &dataset.UpdatedAt, &dataset.DeletedAt); err != nil {
 			return DatasetPage{}, fmt.Errorf("scan dataset: %w", err)
 		}
 		pageResult.Items = append(pageResult.Items, dataset)
