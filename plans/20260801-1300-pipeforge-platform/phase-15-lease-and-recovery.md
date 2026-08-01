@@ -27,7 +27,7 @@ Go assigns/renews leases transactionally. Workers renew on a timer and stop work
 ## Related Code Files
 
 - Create: `go/internal/lease/`, `go/internal/retry/`, `go/internal/dlq/`
-- Create: `go/migrations/000009_leases_retries_dlq.sql`
+- Create: `go/migrations/000010_leases_retries_dlq.sql`
 - Modify: scheduler, result consumer, job transitions, contracts, API/admin handlers
 - Create: lease/retry/DLQ unit/integration/e2e tests
 - Create/modify: `docs/architecture/worker-failure-sequence.md`, retry/DLQ docs/runbook
@@ -72,4 +72,3 @@ Phase 16 adds bounded progress events and cooperative cancellation on the lease 
 ## Unresolved Questions
 
 - None blocking; initial lease/heartbeat defaults will be documented from measured local processing latency and made configurable.
-

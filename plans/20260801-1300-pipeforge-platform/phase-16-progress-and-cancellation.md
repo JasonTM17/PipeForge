@@ -26,7 +26,7 @@ Go stores latest progress snapshot plus capped history. API cancellation transac
 
 ## Related Code Files
 
-- Create: `go/migrations/000010_progress_cancellation.sql`, progress repository/handlers
+- Create: `go/migrations/000011_progress_cancellation.sql`, progress repository/handlers
 - Modify: Go scheduler/result consumer/queue, Python consumer/context/publisher
 - Modify: progress/cancel JSON Schemas and OpenAPI
 - Create: race/cancellation tests and sequence docs
@@ -69,4 +69,3 @@ Phase 17 provides `pipectl` access to the public API.
 ## Unresolved Questions
 
 - None blocking; progress history retention is configurable and capped by default.
-
