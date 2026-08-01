@@ -12,12 +12,16 @@ import (
 )
 
 const (
-	defaultHTTPAddr          = ":8080"
-	defaultMaxConnections    = int32(10)
-	defaultShutdown          = 10 * time.Second
-	defaultAccessTokenTTL    = 15 * time.Minute
-	defaultRefreshTokenTTL   = 30 * 24 * time.Hour
-	defaultDevelopmentJWTKey = "pipeforge-local-jwt-key-change-me"
+	defaultHTTPAddr               = ":8080"
+	defaultMaxConnections         = int32(10)
+	defaultShutdown               = 10 * time.Second
+	defaultAccessTokenTTL         = 15 * time.Minute
+	defaultRefreshTokenTTL        = 30 * 24 * time.Hour
+	defaultDevelopmentJWTKey      = "pipeforge-local-jwt-key-change-me"
+	defaultDevelopmentMinIOKey    = "pipeforge"
+	defaultDevelopmentMinIOSecret = "pipeforge-local-minio-secret"
+	defaultDatasetBucket          = "datasets"
+	defaultMaxUploadBytes         = int64(64 * 1024 * 1024)
 )
 
 // Config contains validated runtime settings. Secrets are kept in memory only
@@ -36,6 +40,12 @@ type Config struct {
 	JWTSigningKey    string
 	AccessTokenTTL   time.Duration
 	RefreshTokenTTL  time.Duration
+	MinIOEndpoint    string
+	MinIOAccessKey   string
+	MinIOSecretKey   string
+	MinIOSecure      bool
+	DatasetBucket    string
+	MaxUploadBytes   int64
 }
 
 // Load reads environment variables through getenv so tests can provide a
@@ -50,6 +60,12 @@ func Load(getenv func(string) string) (Config, error) {
 	if jwtSigningKey == "" && environment == "development" {
 		jwtSigningKey = defaultDevelopmentJWTKey
 	}
+	minioAccessKey := getenv("MINIO_ACCESS_KEY")
+	minioSecretKey := getenv("MINIO_SECRET_KEY")
+	if environment == "development" {
+		minioAccessKey = valueOrDefault(minioAccessKey, defaultDevelopmentMinIOKey)
+		minioSecretKey = valueOrDefault(minioSecretKey, defaultDevelopmentMinIOSecret)
+	}
 	cfg := Config{
 		Environment:      environment,
 		LogLevel:         valueOrDefault(getenv("PIPEFORGE_LOG_LEVEL"), "info"),
@@ -63,6 +79,11 @@ func Load(getenv func(string) string) (Config, error) {
 		JWTSigningKey:    jwtSigningKey,
 		AccessTokenTTL:   defaultAccessTokenTTL,
 		RefreshTokenTTL:  defaultRefreshTokenTTL,
+		MinIOEndpoint:    valueOrDefault(getenv("MINIO_ENDPOINT"), "localhost:59010"),
+		MinIOAccessKey:   minioAccessKey,
+		MinIOSecretKey:   minioSecretKey,
+		DatasetBucket:    valueOrDefault(getenv("MINIO_DATASET_BUCKET"), defaultDatasetBucket),
+		MaxUploadBytes:   defaultMaxUploadBytes,
 	}
 
 	port, err := parseUint16(valueOrDefault(getenv("POSTGRES_PORT"), "5432"))
@@ -98,6 +119,20 @@ func Load(getenv func(string) string) (Config, error) {
 			return Config{}, err
 		}
 	}
+	if raw := getenv("MINIO_SECURE"); raw != "" {
+		secure, parseErr := strconv.ParseBool(raw)
+		if parseErr != nil {
+			return Config{}, errors.New("MINIO_SECURE must be true or false")
+		}
+		cfg.MinIOSecure = secure
+	}
+	if raw := getenv("PIPEFORGE_MAX_UPLOAD_BYTES"); raw != "" {
+		maxBytes, parseErr := strconv.ParseInt(raw, 10, 64)
+		if parseErr != nil || maxBytes < 1 {
+			return Config{}, errors.New("PIPEFORGE_MAX_UPLOAD_BYTES must be a positive integer")
+		}
+		cfg.MaxUploadBytes = maxBytes
+	}
 
 	if err := cfg.validate(); err != nil {
 		return Config{}, err
@@ -115,6 +150,9 @@ func (c Config) validate() error {
 	if len(c.JWTSigningKey) < 32 {
 		return errors.New("JWT_SIGNING_KEY must be at least 32 bytes")
 	}
+	if strings.TrimSpace(c.MinIOEndpoint) == "" || strings.TrimSpace(c.MinIOAccessKey) == "" || strings.TrimSpace(c.MinIOSecretKey) == "" || strings.TrimSpace(c.DatasetBucket) == "" {
+		return errors.New("MinIO endpoint, credentials, and dataset bucket must not be empty")
+	}
 	_, httpPort, err := net.SplitHostPort(c.HTTPAddr)
 	if err != nil {
 		return fmt.Errorf("PIPEFORGE_HTTP_ADDR must be host:port: %w", err)
@@ -126,8 +164,8 @@ func (c Config) validate() error {
 	if strings.TrimSpace(c.DatabaseHost) == "" || strings.TrimSpace(c.DatabaseName) == "" || strings.TrimSpace(c.DatabaseUser) == "" {
 		return errors.New("PostgreSQL host, database, and user must not be empty")
 	}
-	if c.DatabasePort == 0 || c.DatabaseMaxConns < 1 || c.ShutdownTimeout <= 0 || c.AccessTokenTTL <= 0 || c.RefreshTokenTTL <= 0 {
-		return errors.New("PostgreSQL port, connection limit, shutdown timeout, and token TTLs must be positive")
+	if c.DatabasePort == 0 || c.DatabaseMaxConns < 1 || c.ShutdownTimeout <= 0 || c.AccessTokenTTL <= 0 || c.RefreshTokenTTL <= 0 || c.MaxUploadBytes <= 0 {
+		return errors.New("PostgreSQL port, connection limit, shutdown timeout, token TTLs, and upload limit must be positive")
 	}
 	return nil
 }

@@ -20,6 +20,9 @@ func TestLoadUsesDefaults(t *testing.T) {
 	if cfg.AccessTokenTTL != defaultAccessTokenTTL || cfg.RefreshTokenTTL != defaultRefreshTokenTTL || cfg.JWTSigningKey == "" {
 		t.Fatalf("unexpected identity defaults: %+v", cfg)
 	}
+	if cfg.MinIOEndpoint == "" || cfg.MinIOAccessKey == "" || cfg.MinIOSecretKey == "" || cfg.DatasetBucket != defaultDatasetBucket || cfg.MaxUploadBytes != defaultMaxUploadBytes {
+		t.Fatalf("unexpected storage defaults: %+v", cfg)
+	}
 }
 
 func TestLoadParsesOverrides(t *testing.T) {
@@ -32,12 +35,18 @@ func TestLoadParsesOverrides(t *testing.T) {
 		"PIPEFORGE_ACCESS_TOKEN_TTL":   "10m",
 		"PIPEFORGE_REFRESH_TOKEN_TTL":  "48h",
 		"JWT_SIGNING_KEY":              "test-jwt-signing-key-with-32-bytes!!",
+		"MINIO_ENDPOINT":               "minio:9000",
+		"MINIO_ACCESS_KEY":             "access",
+		"MINIO_SECRET_KEY":             "secret",
+		"MINIO_DATASET_BUCKET":         "custom-datasets",
+		"MINIO_SECURE":                 "true",
+		"PIPEFORGE_MAX_UPLOAD_BYTES":   "1048576",
 	}
 	cfg, err := Load(func(key string) string { return values[key] })
 	if err != nil {
 		t.Fatalf("Load returned error: %v", err)
 	}
-	if cfg.DatabasePort != 55433 || cfg.DatabaseMaxConns != 4 || cfg.ShutdownTimeout != 3*time.Second || cfg.AccessTokenTTL != 10*time.Minute || cfg.RefreshTokenTTL != 48*time.Hour {
+	if cfg.DatabasePort != 55433 || cfg.DatabaseMaxConns != 4 || cfg.ShutdownTimeout != 3*time.Second || cfg.AccessTokenTTL != 10*time.Minute || cfg.RefreshTokenTTL != 48*time.Hour || cfg.MinIOEndpoint != "minio:9000" || !cfg.MinIOSecure || cfg.MaxUploadBytes != 1048576 {
 		t.Fatalf("unexpected overrides: %+v", cfg)
 	}
 }
