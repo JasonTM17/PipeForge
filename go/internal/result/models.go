@@ -37,7 +37,7 @@ type Artifact struct {
 	OwnerUserID    uuid.UUID `json:"-"`
 	JobID          uuid.UUID `json:"jobId"`
 	AttemptID      uuid.UUID `json:"attemptId"`
-	LeaseID        uuid.UUID `json:"leaseId"`
+	LeaseID        uuid.UUID `json:"-"`
 	Kind           string    `json:"kind"`
 	ObjectKey      string    `json:"-"`
 	SizeBytes      int64     `json:"sizeBytes"`
