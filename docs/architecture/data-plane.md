@@ -6,11 +6,28 @@ The Python data plane performs computation only. A worker receives a validated c
 
 The package lives under `python/src/pipeforge_worker` and keeps external clients behind injected protocols. `Settings` validates bounded concurrency, prefetch, message size, heartbeat, and shutdown limits. The worker exposes `/health/live`, `/health/ready`, and `/metrics` on port `8090`; `PIPEFORGE_WORKER_HEALTH_ONLY=true` starts this surface without broker or object-storage intake.
 
-The RabbitMQ adapter uses durable queues, persistent messages, publisher confirms, bounded prefetch, and manual acknowledgement. A command is acknowledged only after its handler returns `ACK`; malformed or not-yet-supported commands are rejected with `requeue=false`, which hands them to the configured dead-letter exchange. The phase-9 handler intentionally classifies valid jobs to DLQ until the processing pipeline is implemented.
+The RabbitMQ adapter uses durable queues, persistent messages, publisher confirms, bounded prefetch, and manual acknowledgement. A command is acknowledged only after its handler returns `ACK`; malformed or not-yet-supported commands are rejected with `requeue=false`, which hands them to the configured dead-letter exchange. The intake classifier remains fail-closed until lease-bound source resolution and result publication are connected in the later result/lease phases.
 
 Worker registration and heartbeat messages are validated against the shared JSON Schemas. Heartbeats expose only bounded worker metadata and at most 128 opaque job IDs. Structured logs redact credentials, bearer tokens, and presigned URL credentials; raw dataset rows are never logged.
 
 ## Processing pipeline
+
+Phase 10 adds a format-aware reader factory and an injected `ProcessingPipeline`.
+CSV and JSON Lines are decoded incrementally into bounded Polars frames; Parquet
+uses PyArrow record batches and converts each batch to a Polars frame. Format
+signals from magic bytes, content type, extension, and bounded sniffing must
+agree, otherwise the input is rejected as ambiguous. Byte/row/chunk limits are
+validated before iteration.
+
+Malformed text rows use one of three explicit policies: `FAIL_FAST` raises a
+non-retryable reader error, `SKIP_AND_REPORT` emits capped row-number/hash
+diagnostics, and `QUARANTINE` emits the same bounded references with a
+quarantine classification. Complete row contents are never logged.
+
+The pipeline invokes injected aggregators between cancellation checks and emits
+time-throttled progress snapshots. It does not decide authoritative job state,
+promote artifacts, or publish success events; those responsibilities remain in
+the Go result/lease workflow.
 
 ```mermaid
 flowchart LR

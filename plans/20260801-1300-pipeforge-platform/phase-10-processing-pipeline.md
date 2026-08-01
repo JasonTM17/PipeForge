@@ -1,10 +1,13 @@
 ---
 phase: 10
-title: "Processing pipeline"
-status: pending
+title: Processing pipeline
+status: completed
 priority: P1
-effort: "4d"
-dependencies: [5, 7, 9]
+effort: 4d
+dependencies:
+  - 5
+  - 7
+  - 9
 ---
 
 # Phase 10: Processing pipeline
@@ -41,11 +44,11 @@ Implement safe format detection and CSV/JSONL/Parquet readers with a processor p
 
 ## Success Criteria
 
-- [ ] All MVP readers process a fixture without full-file materialization.
-- [ ] `FAIL_FAST`, `SKIP_AND_REPORT`, and `QUARANTINE` policies produce documented outcomes.
-- [ ] Unsupported/malformed inputs classify as non-retryable and do not loop.
-- [ ] Cancellation stops between chunks and cleans temporary outputs.
-- [ ] Reader/pipeline tests are deterministic and type checked.
+- [x] All MVP readers process a fixture without full-file materialization.
+- [x] `FAIL_FAST`, `SKIP_AND_REPORT`, and `QUARANTINE` policies produce documented outcomes.
+- [x] Unsupported/malformed inputs classify as non-retryable and do not loop.
+- [x] Cancellation stops between chunks and cleans temporary outputs.
+- [x] Reader/pipeline tests are deterministic and type checked.
 
 ## Validation
 
@@ -70,4 +73,3 @@ Phase 11 builds profiling aggregators and report artifacts on the pipeline.
 ## Unresolved Questions
 
 - None blocking; approximate distinct counting is optional and selected only where exact counting exceeds configured limits.
-
