@@ -1,0 +1,464 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>PipeForge | Analytics Dashboard</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@100..900&display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            "colors": {
+                    "primary-fixed-dim": "#00daf3",
+                    "on-tertiary-container": "#57595b",
+                    "on-secondary": "#432c00",
+                    "inverse-primary": "#006875",
+                    "surface-container": "#1b2025",
+                    "primary": "#c3f5ff",
+                    "inverse-on-surface": "#2c3136",
+                    "on-tertiary-fixed": "#1a1c1e",
+                    "secondary-container": "#feb300",
+                    "surface-container-low": "#171c21",
+                    "on-tertiary": "#2f3133",
+                    "surface-bright": "#353a3f",
+                    "on-secondary-fixed": "#281900",
+                    "surface-tint": "#00daf3",
+                    "tertiary": "#ececef",
+                    "on-primary": "#00363d",
+                    "outline-variant": "#3b494c",
+                    "tertiary-fixed-dim": "#c6c6c9",
+                    "on-background": "#dee3e9",
+                    "on-primary-fixed-variant": "#004f58",
+                    "tertiary-fixed": "#e2e2e5",
+                    "on-surface-variant": "#bac9cc",
+                    "on-surface": "#dee3e9",
+                    "surface-container-lowest": "#0a0f13",
+                    "on-tertiary-fixed-variant": "#454749",
+                    "background": "#0f1418",
+                    "tertiary-container": "#d0d0d3",
+                    "on-primary-container": "#00626e",
+                    "outline": "#849396",
+                    "surface-container-highest": "#30353a",
+                    "inverse-surface": "#dee3e9",
+                    "error-container": "#93000a",
+                    "primary-container": "#00e5ff",
+                    "primary-fixed": "#9cf0ff",
+                    "error": "#ffb4ab",
+                    "surface-container-high": "#252b2f",
+                    "secondary-fixed-dim": "#ffba38",
+                    "secondary": "#ffd799",
+                    "surface-dim": "#0f1418",
+                    "on-error-container": "#ffdad6",
+                    "on-secondary-fixed-variant": "#604100",
+                    "surface-variant": "#30353a",
+                    "on-secondary-container": "#6a4800",
+                    "secondary-fixed": "#ffdeac",
+                    "on-primary-fixed": "#001f24",
+                    "on-error": "#690005",
+                    "surface": "#0f1418"
+            },
+            "borderRadius": {
+                    "DEFAULT": "0.125rem",
+                    "lg": "0.25rem",
+                    "xl": "0.5rem",
+                    "full": "0.75rem"
+            },
+            "spacing": {
+                    "gutter": "16px",
+                    "stack-comfortable": "16px",
+                    "stack-compact": "8px",
+                    "unit": "4px",
+                    "margin-page": "24px"
+            },
+            "fontFamily": {
+                    "label-caps": ["Inter"],
+                    "headline-md": ["Inter"],
+                    "title-sm": ["Inter"],
+                    "code-md": ["JetBrains Mono"],
+                    "display-lg": ["Inter"],
+                    "body-md": ["Inter"],
+                    "body-sm": ["Inter"],
+                    "code-sm": ["JetBrains Mono"]
+            },
+            "fontSize": {
+                    "label-caps": ["11px", {"lineHeight": "16px", "letterSpacing": "0.08em", "fontWeight": "700"}],
+                    "headline-md": ["24px", {"lineHeight": "32px", "fontWeight": "600"}],
+                    "title-sm": ["16px", {"lineHeight": "24px", "fontWeight": "500"}],
+                    "code-md": ["13px", {"lineHeight": "20px", "fontWeight": "400"}],
+                    "display-lg": ["32px", {"lineHeight": "40px", "letterSpacing": "-0.02em", "fontWeight": "600"}],
+                    "body-md": ["14px", {"lineHeight": "20px", "fontWeight": "400"}],
+                    "body-sm": ["13px", {"lineHeight": "18px", "fontWeight": "400"}],
+                    "code-sm": ["11px", {"lineHeight": "16px", "letterSpacing": "0.05em", "fontWeight": "500"}]
+            }
+          },
+        },
+      }
+    </script>
+<style>
+        body {
+            background-color: #0f1418;
+            color: #dee3e9;
+            font-family: 'Inter', sans-serif;
+            overflow-x: hidden;
+        }
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+            vertical-align: middle;
+        }
+        .custom-scrollbar::-webkit-scrollbar {
+            width: 4px;
+            height: 4px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-track {
+            background: #171c21;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb {
+            background: #3b494c;
+        }
+        .active-rail-item {
+            background-color: #30353a;
+            border-left: 2px solid #00daf3;
+            color: #00daf3;
+        }
+        .sparkline-svg {
+            stroke: #00daf3;
+            stroke-width: 1.5;
+            fill: none;
+        }
+    </style>
+</head>
+<body class="dark bg-background text-on-background">
+<!-- SIDE NAV RAIL -->
+<aside class="fixed left-0 top-0 h-full z-40 flex flex-col w-16 hover:w-60 transition-all duration-300 bg-surface-container-low border-r border-outline-variant group">
+<div class="h-16 flex items-center px-4 overflow-hidden">
+<span class="material-symbols-outlined text-primary-fixed-dim text-2xl mr-4 shrink-0">rocket_launch</span>
+<span class="font-headline-md text-headline-md font-bold text-primary-fixed-dim opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap">PipeForge</span>
+</div>
+<nav class="flex-1 mt-4 space-y-1">
+<a class="flex items-center h-12 px-4 transition-all duration-200 ease-in-out active-rail-item" href="#">
+<span class="material-symbols-outlined shrink-0 mr-4">dashboard</span>
+<span class="font-label-caps text-label-caps opacity-0 group-hover:opacity-100 whitespace-nowrap">Overview</span>
+</a>
+<a class="flex items-center h-12 px-4 transition-all duration-200 ease-in-out text-on-surface-variant hover:bg-surface-container-high hover:text-primary-fixed-dim" href="#">
+<span class="material-symbols-outlined shrink-0 mr-4">database</span>
+<span class="font-label-caps text-label-caps opacity-0 group-hover:opacity-100 whitespace-nowrap">Datasets</span>
+</a>
+<a class="flex items-center h-12 px-4 transition-all duration-200 ease-in-out text-on-surface-variant hover:bg-surface-container-high hover:text-primary-fixed-dim" href="#">
+<span class="material-symbols-outlined shrink-0 mr-4">terminal</span>
+<span class="font-label-caps text-label-caps opacity-0 group-hover:opacity-100 whitespace-nowrap">Jobs</span>
+</a>
+<a class="flex items-center h-12 px-4 transition-all duration-200 ease-in-out text-on-surface-variant hover:bg-surface-container-high hover:text-primary-fixed-dim" href="#">
+<span class="material-symbols-outlined shrink-0 mr-4">fact_check</span>
+<span class="font-label-caps text-label-caps opacity-0 group-hover:opacity-100 whitespace-nowrap">Quality Rules</span>
+</a>
+<a class="flex items-center h-12 px-4 transition-all duration-200 ease-in-out text-on-surface-variant hover:bg-surface-container-high hover:text-primary-fixed-dim" href="#">
+<span class="material-symbols-outlined shrink-0 mr-4">engineering</span>
+<span class="font-label-caps text-label-caps opacity-0 group-hover:opacity-100 whitespace-nowrap">Workers</span>
+</a>
+<a class="flex items-center h-12 px-4 transition-all duration-200 ease-in-out text-on-surface-variant hover:bg-surface-container-high hover:text-primary-fixed-dim" href="#">
+<span class="material-symbols-outlined shrink-0 mr-4">inventory_2</span>
+<span class="font-label-caps text-label-caps opacity-0 group-hover:opacity-100 whitespace-nowrap">Artifacts</span>
+</a>
+</nav>
+<div class="mt-auto border-t border-outline-variant py-4 space-y-1">
+<a class="flex items-center h-12 px-4 text-on-surface-variant hover:bg-surface-container-high hover:text-primary-fixed-dim transition-all" href="#">
+<span class="material-symbols-outlined shrink-0 mr-4">settings</span>
+<span class="font-label-caps text-label-caps opacity-0 group-hover:opacity-100 whitespace-nowrap">Settings</span>
+</a>
+<a class="flex items-center h-12 px-4 text-on-surface-variant hover:bg-surface-container-high hover:text-primary-fixed-dim transition-all" href="#">
+<span class="material-symbols-outlined shrink-0 mr-4">help</span>
+<span class="font-label-caps text-label-caps opacity-0 group-hover:opacity-100 whitespace-nowrap">Support</span>
+</a>
+</div>
+</aside>
+<!-- TOP BAR -->
+<header class="fixed top-0 right-0 left-16 h-16 z-30 flex items-center justify-between px-gutter bg-surface-container border-b border-outline-variant">
+<div class="flex items-center gap-6 flex-1">
+<div class="relative w-full max-w-md">
+<span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant text-sm">search</span>
+<input class="w-full bg-surface-container-low border border-outline-variant text-body-sm px-10 py-1.5 focus:outline-none focus:border-primary-container transition-colors rounded" placeholder="Search pipelines, jobs, or logs..." type="text"/>
+</div>
+<div class="hidden md:flex items-center gap-2">
+<span class="material-symbols-outlined text-on-surface-variant">terminal</span>
+<span class="font-title-sm text-title-sm text-primary-fixed-dim">Workspace: Production</span>
+</div>
+</div>
+<div class="flex items-center gap-4">
+<button class="bg-primary-container text-on-primary-container font-label-caps text-label-caps px-4 py-2 hover:opacity-90 active:scale-95 transition-all rounded">Create Job</button>
+<div class="flex items-center gap-2 text-on-surface-variant">
+<span class="material-symbols-outlined cursor-pointer hover:text-primary-fixed-dim">notifications</span>
+<span class="material-symbols-outlined cursor-pointer hover:text-primary-fixed-dim">help_outline</span>
+</div>
+<div class="w-8 h-8 bg-outline-variant rounded flex items-center justify-center overflow-hidden">
+<img class="w-full h-full object-cover" data-alt="A professional headshot of a data scientist in a dark studio setting. The lighting is low-key with a sharp cyan rim light reflecting off the side of their face, matching the high-tech PipeForge brand. The person has a focused, clinical expression appropriate for a mission-critical system operator." src="https://lh3.googleusercontent.com/aida-public/AB6AXuCdkxfa2YlfAGY0VioQKVgAgjNQewLlVdkOLuSS84NJ4F0pOXfCO17EuGnwSpWUgC52UaomMEjU4EI9DDpMyIwpxxbMmFSUXuJ0wqKAtcsVwIgRFtyme-WFX9BHb5IH-DViWi9xvX9TmJQ3o6mnyFnqe2bcBNwlh7EIv2L09ubsMnh-5ILBue4P4bX111_RNfohYFDd-0i0VwdbBKpcdAvuhVODFW_6Q_OtUY45-xzSs_BFc030g6LHAXr3A-LF9ta0kifuiHYGb0I"/>
+</div>
+</div>
+</header>
+<!-- MAIN CONTENT -->
+<main class="ml-16 mt-16 p-margin-page pb-12">
+<div class="max-w-[1600px] mx-auto space-y-gutter">
+<!-- TOP ROW: KPI CARDS -->
+<section class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-gutter">
+<!-- KPI 1 -->
+<div class="bg-surface-container-low border border-outline-variant p-stack-comfortable">
+<div class="flex justify-between items-start mb-2">
+<span class="font-label-caps text-label-caps text-on-surface-variant">ACTIVE JOBS</span>
+<span class="font-code-sm text-code-sm text-primary-fixed-dim">+3 v prev. hour</span>
+</div>
+<div class="flex items-baseline gap-2">
+<span class="font-code-md text-display-lg text-primary-fixed-dim">24</span>
+</div>
+<div class="h-10 mt-2">
+<svg class="w-full h-full sparkline-svg" viewbox="0 0 100 40">
+<polyline points="0,35 10,25 20,30 30,10 40,20 50,15 60,35 70,25 80,10 90,5 100,10"></polyline>
+</svg>
+</div>
+</div>
+<!-- KPI 2 -->
+<div class="bg-surface-container-low border border-outline-variant p-stack-comfortable">
+<div class="flex justify-between items-start mb-2">
+<span class="font-label-caps text-label-caps text-on-surface-variant">QUEUE DEPTH</span>
+<span class="font-code-sm text-code-sm text-on-surface-variant">STABLE</span>
+</div>
+<div class="flex items-baseline gap-2">
+<span class="font-code-md text-display-lg text-on-surface">1.2k</span>
+</div>
+<div class="flex items-end gap-1 h-10 mt-2">
+<div class="bg-outline-variant w-full h-[40%]"></div>
+<div class="bg-outline-variant w-full h-[60%]"></div>
+<div class="bg-outline-variant w-full h-[55%]"></div>
+<div class="bg-outline-variant w-full h-[70%]"></div>
+<div class="bg-outline-variant w-full h-[65%]"></div>
+<div class="bg-primary-fixed-dim w-full h-[62%]"></div>
+</div>
+</div>
+<!-- KPI 3 -->
+<div class="bg-surface-container-low border border-outline-variant p-stack-comfortable">
+<div class="flex justify-between items-start mb-2">
+<span class="font-label-caps text-label-caps text-on-surface-variant">PROCESSING THROUGHPUT</span>
+<span class="material-symbols-outlined text-primary-fixed-dim text-sm">trending_up</span>
+</div>
+<div class="flex items-baseline gap-2">
+<span class="font-code-md text-display-lg text-on-surface">4.2</span>
+<span class="font-code-sm text-code-sm text-on-surface-variant">GB/s</span>
+</div>
+<div class="h-10 mt-2">
+<svg class="w-full h-full sparkline-svg" viewbox="0 0 100 40">
+<polyline points="0,20 20,22 40,18 60,15 80,10 100,5"></polyline>
+</svg>
+</div>
+</div>
+<!-- KPI 4 -->
+<div class="bg-surface-container-low border border-outline-variant p-stack-comfortable">
+<div class="flex justify-between items-start mb-2">
+<span class="font-label-caps text-label-caps text-on-surface-variant">DATA QUALITY SCORE</span>
+<span class="text-primary-fixed-dim font-code-sm text-code-sm">HEALTHY</span>
+</div>
+<div class="flex items-baseline gap-2">
+<span class="font-code-md text-display-lg text-on-surface">98.4%</span>
+</div>
+<div class="h-1 mt-6 bg-surface-container-highest w-full relative">
+<div class="absolute inset-y-0 left-0 bg-primary-fixed-dim" style="width: 98.4%;"></div>
+</div>
+</div>
+</section>
+<!-- MIDDLE SECTION: MAIN TABLE -->
+<section class="bg-surface-container-low border border-outline-variant overflow-hidden">
+<div class="px-gutter py-stack-compact border-b border-outline-variant flex justify-between items-center bg-surface-container-high">
+<h2 class="font-title-sm text-title-sm text-on-surface">Active Job Execution</h2>
+<span class="material-symbols-outlined text-on-surface-variant cursor-pointer">more_horiz</span>
+</div>
+<div class="overflow-x-auto custom-scrollbar">
+<table class="w-full text-left border-collapse">
+<thead class="bg-surface-container text-on-surface-variant font-label-caps text-label-caps">
+<tr>
+<th class="px-gutter py-3 font-normal border-b border-outline-variant">Job Name</th>
+<th class="px-gutter py-3 font-normal border-b border-outline-variant">Status</th>
+<th class="px-gutter py-3 font-normal border-b border-outline-variant">Progress</th>
+<th class="px-gutter py-3 font-normal border-b border-outline-variant text-right">Throughput</th>
+<th class="px-gutter py-3 font-normal border-b border-outline-variant text-right">Duration</th>
+</tr>
+</thead>
+<tbody class="font-body-sm text-body-sm text-on-surface divide-y divide-outline-variant">
+<tr class="hover:bg-surface-container-highest/30 transition-colors">
+<td class="px-gutter py-3 font-code-md">ETL_SALES_AGG_V3</td>
+<td class="px-gutter py-3">
+<span class="bg-primary-container/10 text-primary-fixed-dim border border-primary-fixed-dim/20 px-2 py-0.5 rounded-full text-[10px] font-bold">RUNNING</span>
+</td>
+<td class="px-gutter py-3 min-w-[120px]">
+<div class="flex items-center gap-2">
+<div class="flex-1 h-1 bg-surface-container-highest">
+<div class="h-full bg-primary-fixed-dim" style="width: 64%"></div>
+</div>
+<span class="font-code-sm text-code-sm w-8">64%</span>
+</div>
+</td>
+<td class="px-gutter py-3 text-right font-code-sm">840 MB/s</td>
+<td class="px-gutter py-3 text-right font-code-sm">00:42:12</td>
+</tr>
+<tr class="hover:bg-surface-container-highest/30 transition-colors">
+<td class="px-gutter py-3 font-code-md">LOG_STREAM_ANALYSIS</td>
+<td class="px-gutter py-3">
+<span class="bg-secondary-container/10 text-secondary-fixed-dim border border-secondary-fixed-dim/20 px-2 py-0.5 rounded-full text-[10px] font-bold uppercase">Backpressure</span>
+</td>
+<td class="px-gutter py-3">
+<div class="flex items-center gap-2">
+<div class="flex-1 h-1 bg-surface-container-highest">
+<div class="h-full bg-secondary-fixed-dim" style="width: 22%"></div>
+</div>
+<span class="font-code-sm text-code-sm w-8">22%</span>
+</div>
+</td>
+<td class="px-gutter py-3 text-right font-code-sm">124 MB/s</td>
+<td class="px-gutter py-3 text-right font-code-sm">02:15:04</td>
+</tr>
+<tr class="hover:bg-surface-container-highest/30 transition-colors">
+<td class="px-gutter py-3 font-code-md">CLEANSE_RECON_FINANCE</td>
+<td class="px-gutter py-3">
+<span class="bg-primary-container/10 text-primary-fixed-dim border border-primary-fixed-dim/20 px-2 py-0.5 rounded-full text-[10px] font-bold">RUNNING</span>
+</td>
+<td class="px-gutter py-3">
+<div class="flex items-center gap-2">
+<div class="flex-1 h-1 bg-surface-container-highest">
+<div class="h-full bg-primary-fixed-dim" style="width: 89%"></div>
+</div>
+<span class="font-code-sm text-code-sm w-8">89%</span>
+</div>
+</td>
+<td class="px-gutter py-3 text-right font-code-sm">1.2 GB/s</td>
+<td class="px-gutter py-3 text-right font-code-sm">00:12:45</td>
+</tr>
+</tbody>
+</table>
+</div>
+</section>
+<!-- BOTTOM ROW -->
+<section class="grid grid-cols-1 lg:grid-cols-3 gap-gutter">
+<!-- DATASET HEALTH (2/3 width) -->
+<div class="lg:col-span-2 bg-surface-container-low border border-outline-variant flex flex-col">
+<div class="px-gutter py-stack-compact border-b border-outline-variant bg-surface-container-high flex justify-between items-center">
+<h2 class="font-title-sm text-title-sm text-on-surface">Dataset Health</h2>
+<button class="text-primary-fixed-dim font-label-caps text-[10px] hover:underline uppercase">View All</button>
+</div>
+<div class="p-gutter grid grid-cols-1 md:grid-cols-3 gap-4 h-full">
+<!-- Dataset Card 1 -->
+<div class="border border-outline-variant p-3 bg-surface-container-lowest">
+<h3 class="font-code-md text-primary-fixed-dim mb-4">raw_telemetry</h3>
+<div class="space-y-3">
+<div class="flex justify-between items-center">
+<span class="text-on-surface-variant font-label-caps text-[10px]">ROWS</span>
+<span class="font-code-sm text-code-sm">12.4M</span>
+</div>
+<div class="flex justify-between items-center">
+<span class="text-on-surface-variant font-label-caps text-[10px]">BYTES</span>
+<span class="font-code-sm text-code-sm">4.8GB</span>
+</div>
+<div class="pt-2 border-t border-outline-variant flex gap-2">
+<span class="text-[10px] bg-primary/10 text-primary px-1.5 font-bold">12 PASSED</span>
+<span class="text-[10px] bg-error-container/20 text-error px-1.5 font-bold">0 FAILED</span>
+</div>
+</div>
+</div>
+<!-- Dataset Card 2 -->
+<div class="border border-outline-variant p-3 bg-surface-container-lowest">
+<h3 class="font-code-md text-primary-fixed-dim mb-4">usr_sessions_p1</h3>
+<div class="space-y-3">
+<div class="flex justify-between items-center">
+<span class="text-on-surface-variant font-label-caps text-[10px]">ROWS</span>
+<span class="font-code-sm text-code-sm">450k</span>
+</div>
+<div class="flex justify-between items-center">
+<span class="text-on-surface-variant font-label-caps text-[10px]">BYTES</span>
+<span class="font-code-sm text-code-sm">124MB</span>
+</div>
+<div class="pt-2 border-t border-outline-variant flex gap-2">
+<span class="text-[10px] bg-primary/10 text-primary px-1.5 font-bold">8 PASSED</span>
+<span class="text-[10px] bg-secondary-container/20 text-secondary-fixed-dim px-1.5 font-bold">1 WARN</span>
+</div>
+</div>
+</div>
+<!-- Dataset Card 3 -->
+<div class="border border-outline-variant p-3 bg-surface-container-lowest">
+<h3 class="font-code-md text-primary-fixed-dim mb-4">fin_ledger_daily</h3>
+<div class="space-y-3">
+<div class="flex justify-between items-center">
+<span class="text-on-surface-variant font-label-caps text-[10px]">ROWS</span>
+<span class="font-code-sm text-code-sm">1.8M</span>
+</div>
+<div class="flex justify-between items-center">
+<span class="text-on-surface-variant font-label-caps text-[10px]">BYTES</span>
+<span class="font-code-sm text-code-sm">890MB</span>
+</div>
+<div class="pt-2 border-t border-outline-variant flex gap-2">
+<span class="text-[10px] bg-primary/10 text-primary px-1.5 font-bold">24 PASSED</span>
+<span class="text-[10px] bg-primary/10 text-primary px-1.5 font-bold">0 FAILED</span>
+</div>
+</div>
+</div>
+</div>
+</div>
+<!-- SYSTEM ACTIVITY FEED (1/3 width) -->
+<div class="bg-surface-container-low border border-outline-variant">
+<div class="px-gutter py-stack-compact border-b border-outline-variant bg-surface-container-high">
+<h2 class="font-title-sm text-title-sm text-on-surface">System Activity</h2>
+</div>
+<div class="p-gutter space-y-6 relative">
+<!-- Vertical line -->
+<div class="absolute left-[23px] top-6 bottom-6 w-[1px] bg-outline-variant"></div>
+<!-- Timeline Item 1 -->
+<div class="flex gap-4 relative z-10">
+<div class="w-[14px] h-[14px] rounded-full bg-primary-fixed-dim mt-1 ring-4 ring-surface-container-low"></div>
+<div>
+<p class="text-body-sm font-medium">Worker Node 04 Joined</p>
+<p class="text-code-sm text-on-surface-variant">09:42:12 | cluster-us-east</p>
+</div>
+</div>
+<!-- Timeline Item 2 -->
+<div class="flex gap-4 relative z-10">
+<div class="w-[14px] h-[14px] rounded-full bg-primary-fixed-dim mt-1 ring-4 ring-surface-container-low"></div>
+<div>
+<p class="text-body-sm font-medium">Job PF-1294 Completed</p>
+<p class="text-code-sm text-on-surface-variant">09:38:05 | Success in 2.4s</p>
+</div>
+</div>
+<!-- Timeline Item 3 -->
+<div class="flex gap-4 relative z-10">
+<div class="w-[14px] h-[14px] rounded-full bg-secondary-fixed-dim mt-1 ring-4 ring-surface-container-low"></div>
+<div>
+<p class="text-body-sm font-medium text-secondary-fixed-dim">Backpressure Warning</p>
+<p class="text-code-sm text-on-surface-variant">09:35:44 | STREAM_INGEST</p>
+</div>
+</div>
+</div>
+</div>
+</section>
+</div>
+</main>
+<!-- FOOTER -->
+<footer class="fixed bottom-0 right-0 left-16 h-8 z-30 flex items-center justify-between px-gutter bg-surface-container-lowest border-t border-outline-variant">
+<span class="font-code-sm text-code-sm text-on-tertiary-fixed-variant">System Status: API Online | Workers: 124 Active</span>
+<div class="flex gap-4">
+<span class="font-code-sm text-code-sm text-secondary-fixed-dim hover:underline cursor-pointer">API Health: 99.9%</span>
+<span class="font-code-sm text-code-sm text-secondary-fixed-dim hover:underline cursor-pointer">Worker Nodes: 12/12</span>
+</div>
+</footer>
+<!-- INTERACTION SCRIPTS -->
+<script>
+        // Simple micro-interaction for side rail expansion logic is handled via CSS group-hover
+        // but we can add some dynamic throughput simulation
+        document.querySelectorAll('table tbody tr').forEach(row => {
+            row.addEventListener('mouseenter', () => {
+                row.style.transform = 'translateX(4px)';
+                row.style.transition = 'transform 0.2s ease-out';
+            });
+            row.addEventListener('mouseleave', () => {
+                row.style.transform = 'translateX(0)';
+            });
+        });
+    </script>
+</body></html>

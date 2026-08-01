@@ -33,7 +33,7 @@ PipeForge is a from-scratch monorepo for distributed dataset processing. The Go 
 
 - Existing code: no application source, package manifests, Git history, README, or public contracts found; only project rules, CK tooling, and the attached specification exist.
 - Minimum change set: foundation, local infrastructure, Go API, Python worker, contracts, reliable job execution, core processing, tests, security, observability, docs, and CI are all required by the requested portfolio outcome.
-- Deliberately deferred: Excel input, arbitrary Python expressions, deep-learning anomaly models, Redis, Kubernetes/cloud deployment, a web UI, multi-region HA, and production credentials. These are not required to prove the core distributed-system design.
+- Deliberately deferred: Excel input, arbitrary Python expressions, deep-learning anomaly models, Redis, Kubernetes/cloud deployment, multi-region HA, and production credentials. The web UI is now in scope as a thin, API-backed operator console following the user's explicit Stitch design request.
 - Selected mode: HOLD SCOPE. Execute the requested full specification with staged, independently verifiable slices; do not add unrelated product features.
 
 ## Architecture Decisions
@@ -56,6 +56,7 @@ PipeForge is a from-scratch monorepo for distributed dataset processing. The Go 
 - Go remains authoritative for result acceptance, artifacts, state history, leases, retries, dead letters, and duplicate/stale message handling.
 - Unit, integration, contract, end-to-end, security, and race/build checks cover happy paths and failure paths without committed secrets.
 - Architecture, ADRs, API/messaging contracts, threat model, testing strategy, operational runbooks, and CI workflows match the implemented behavior.
+- The web console follows the approved Stitch design direction, is responsive, accessible, and uses real API states rather than placeholder data.
 
 ## Verification and Commit Policy
 
@@ -89,9 +90,11 @@ PipeForge is a from-scratch monorepo for distributed dataset processing. The Go 
 | 18 | [Security and quotas](./phase-18-security-and-quotas.md) | Pending |
 | 19 | [Observability](./phase-19-observability.md) | Pending |
 | 20 | [Delivery](./phase-20-delivery.md) | Pending |
+| 21 | [Frontend console](./phase-21-frontend-console.md) | Pending |
 
 ## Dependencies
 
 - No unfinished project plans or existing implementation dependencies were found.
 - The attached PipeForge specification is the sole product requirement source for this goal.
 - Phase dependencies are linear unless explicitly marked otherwise in phase files; later phases must not bypass authoritative control-plane contracts.
+- Phase 21 depends on the API and delivery contracts being stable enough for a real frontend integration; its design source is exported under `./stitch-exports/dashboard/`.
