@@ -137,7 +137,7 @@ func (s *Service) Logout(ctx context.Context, refreshToken, requestID string) er
 	if err := s.Store.RevokeRefreshTokenFamily(ctx, auth.HashOpaqueToken(refreshToken)); err != nil {
 		return err
 	}
-	return nil
+	return s.Store.RecordAudit(ctx, AuditEvent{Action: "identity.logout", RequestID: requestID})
 }
 
 func (s *Service) AuthenticateBearer(ctx context.Context, token string) (auth.Principal, error) {
