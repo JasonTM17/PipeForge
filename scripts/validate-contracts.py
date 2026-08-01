@@ -4,14 +4,18 @@
 from __future__ import annotations
 
 import json
+import re
 import sys
 from pathlib import Path
-from jsonschema import Draft202012Validator, FormatChecker, RefResolver
+from jsonschema import Draft202012Validator, FormatChecker
+from referencing import Registry, Resource
 
 
 ROOT = Path(__file__).resolve().parents[1]
 SCHEMA_DIR = ROOT / "contracts" / "json-schema"
 EXAMPLE_DIR = ROOT / "contracts" / "examples"
+VERSIONED_SCHEMA_NAME = re.compile(r"^[a-z0-9-]+(?:\.[a-z0-9-]+)*\.v\d+\.schema\.json$")
+VERSIONED_EXAMPLE_NAME = re.compile(r"^[a-z0-9-]+(?:\.[a-z0-9-]+)*\.v\d+\.json$")
 
 
 def load_json(path: Path) -> dict:
@@ -34,9 +38,13 @@ def schema_store() -> dict[str, dict]:
 
 def validator_for(schema_path: Path, store: dict[str, dict]) -> Draft202012Validator:
     schema = load_json(schema_path)
-    base_uri = schema.get("$id", schema_path.as_uri())
-    resolver = RefResolver(base_uri, schema, store=store)
-    return Draft202012Validator(schema, resolver=resolver, format_checker=FormatChecker())
+    resources = {
+        key: Resource.from_contents(value)
+        for key, value in store.items()
+        if key.startswith("https://")
+    }
+    registry = Registry().with_resources(resources.items())
+    return Draft202012Validator(schema, registry=registry, format_checker=FormatChecker())
 
 
 def positive_schema_for(example_path: Path) -> Path:
@@ -55,6 +63,9 @@ def main() -> int:
     store = schema_store()
 
     for schema_path in schema_paths:
+        if not VERSIONED_SCHEMA_NAME.fullmatch(schema_path.name):
+            errors.append(f"schema {schema_path.relative_to(ROOT)}: filename must include a version such as .v1.schema.json")
+            continue
         try:
             validators[schema_path] = validator_for(schema_path, store)
             validators[schema_path].check_schema(load_json(schema_path))
@@ -62,6 +73,9 @@ def main() -> int:
             errors.append(f"schema {schema_path.relative_to(ROOT)}: {exc}")
 
     for example_path in sorted(EXAMPLE_DIR.glob("*.json")):
+        if not VERSIONED_EXAMPLE_NAME.fullmatch(example_path.name):
+            errors.append(f"example {example_path.relative_to(ROOT)}: filename must include a version such as .v1.json")
+            continue
         schema_path = positive_schema_for(example_path)
         validator = validators.get(schema_path)
         if validator is None:

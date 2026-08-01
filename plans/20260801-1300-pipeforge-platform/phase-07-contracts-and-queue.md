@@ -1,10 +1,13 @@
 ---
 phase: 7
-title: "Contracts and queue"
-status: pending
+title: Contracts and queue
+status: in-progress
 priority: P1
-effort: "4d"
-dependencies: [2, 3, 6]
+effort: 4d
+dependencies:
+  - 2
+  - 3
+  - 6
 ---
 
 # Phase 7: Contracts and queue
@@ -34,20 +37,20 @@ Define versioned JSON Schema envelopes and samples, declare RabbitMQ topology, i
 
 ## Implementation Steps
 
-1. Define common envelope and job/worker/result/progress/cancel schemas with compatibility/versioning rules.
-2. Add positive/negative examples and a validation command usable in CI.
-3. Declare exchanges/queues/bindings, durability, dead-letter arguments, prefetch, and retry routing.
-4. Implement a typed Go RabbitMQ publisher with confirms, context timeouts, headers, and reconnect behavior.
-5. Add outbox repository/publisher loop with `FOR UPDATE SKIP LOCKED`, attempts, next-attempt time, and poison-message handling.
-6. Add duplicate/restart/reconnect/validation tests and document acknowledgement order.
+1. [x] Define common envelope and job/worker/result/progress/cancel schemas with compatibility/versioning rules.
+2. [x] Add positive/negative examples and a validation command usable in CI.
+3. [x] Declare exchanges/queues/bindings, durability, dead-letter arguments, prefetch, and retry routing.
+4. [x] Implement a typed Go RabbitMQ publisher with confirms, context timeouts, headers, and reconnect behavior.
+5. [x] Add outbox repository/publisher loop with `FOR UPDATE SKIP LOCKED`, attempts, next-attempt time, and poison-message handling.
+6. [x] Add duplicate/restart/reconnect/validation tests and document acknowledgement order.
 
 ## Success Criteria
 
-- [ ] All required message types have schemas, examples, and changelog entries.
-- [ ] Invalid envelope/payloads fail before publish/processing with actionable diagnostics.
-- [ ] Outbox domain transaction is independently testable and publisher recovery does not duplicate side effects beyond at-least-once delivery.
-- [ ] RabbitMQ topology is durable and has no infinite requeue loop.
-- [ ] Trace/correlation headers survive publication.
+- [x] All required message types have schemas, examples, and changelog entries.
+- [x] Invalid envelope/payloads fail before publish/processing with actionable diagnostics.
+- [x] Outbox domain transaction is independently testable and publisher recovery does not duplicate side effects beyond at-least-once delivery.
+- [x] RabbitMQ topology is durable and has no infinite requeue loop.
+- [x] Trace/correlation headers survive publication.
 
 ## Validation
 
@@ -55,6 +58,15 @@ Define versioned JSON Schema envelopes and samples, declare RabbitMQ topology, i
 - RabbitMQ container topology inspection
 - Go outbox unit tests and broker integration test with forced reconnect
 - static scan that prevents unversioned contract additions
+
+Verified 2026-08-01:
+
+- `python scripts/validate-contracts.py`: 10 schemas, 9 valid examples, and 2 invalid examples passed.
+- `go test ./...` and `go vet ./...`: passed in the Go 1.23 container.
+- `go test -tags=integration ./internal/queue`: passed against the Compose RabbitMQ service, including forced reconnect.
+- `go test -tags=integration ./internal/outbox`: passed against the migrated PostgreSQL service, including transaction enqueue, `SKIP LOCKED` lease, and wrong-token rejection.
+- RabbitMQ CLI inspection confirmed three durable topic exchanges, eight durable queues, DLQ arguments, and bindings.
+- `git diff --check`: pass.
 
 ## Risk Assessment
 
@@ -72,4 +84,3 @@ Phase 8 adds job creation and scheduling on the outbox/queue foundation.
 ## Unresolved Questions
 
 - None blocking; retry exchange mechanics may use delayed queues or scheduled republish, but must remain bounded and documented.
-
