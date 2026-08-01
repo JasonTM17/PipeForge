@@ -10,7 +10,10 @@
     "jobId": "22222222-2222-4222-8222-222222222222",
     "datasetVersionId": "33333333-3333-4333-8333-333333333333",
     "operations": [
-      { "type": "PROFILE_DATASET", "config": {} },
+      {
+        "type": "PROFILE_DATASET",
+        "config": { "sampling": { "maxRows": 128, "seed": 7 }, "quantiles": [0.5] }
+      },
       { "type": "CHECK_MISSING_VALUES", "config": { "columns": ["email"] } }
     ]
   }

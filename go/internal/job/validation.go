@@ -57,8 +57,8 @@ func ValidateOperations(operations []Operation) error {
 		}
 		switch operationType {
 		case "PROFILE_DATASET":
-			if len(operation.Config) != 0 {
-				return fmt.Errorf("%w: PROFILE_DATASET config must be empty", ErrInvalidInput)
+			if err := validateProfileConfig(operation.Config); err != nil {
+				return fmt.Errorf("%w: operation %d profile config: %v", ErrInvalidInput, index, err)
 			}
 		case "CHECK_MISSING_VALUES":
 			if err := validateConfigKeys(operation.Config, "columns"); err != nil {

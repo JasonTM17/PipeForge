@@ -82,3 +82,29 @@ func TestValidateOperationsRejectsUnsafeOrUnknownContracts(t *testing.T) {
 		})
 	}
 }
+
+func TestValidateOperationsAcceptsBoundedProfileConfig(t *testing.T) {
+	valid := []Operation{{
+		Type: "PROFILE_DATASET",
+		Config: map[string]any{
+			"sampling":            map[string]any{"strategy": "RESERVOIR", "maxRows": 128, "seed": 7},
+			"includeCommonValues": true,
+			"maxCommonValues":     10,
+			"quantiles":           []float64{0.5, 0.95},
+			"distinctStrategy":    "APPROXIMATE",
+			"maxDistinctValues":   1024,
+			"maxMemoryBytes":      1 << 20,
+			"sensitiveColumns":    []string{"email"},
+		},
+	}}
+	if err := ValidateOperations(valid); err != nil {
+		t.Fatalf("expected bounded profile config to pass: %v", err)
+	}
+	invalid := []Operation{{
+		Type:   "PROFILE_DATASET",
+		Config: map[string]any{"unknown": true},
+	}}
+	if err := ValidateOperations(invalid); !errors.Is(err, ErrInvalidInput) {
+		t.Fatalf("expected unknown profile field to fail, got %v", err)
+	}
+}
