@@ -66,4 +66,3 @@ components:
         details:
           type: object
           additionalProperties: true
-

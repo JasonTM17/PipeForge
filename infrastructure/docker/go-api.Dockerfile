@@ -20,4 +20,3 @@ COPY --from=build /out/pipeforge-migrate /usr/local/bin/pipeforge-migrate
 USER pipeforge
 EXPOSE 8080
 ENTRYPOINT ["/usr/local/bin/pipeforge-api"]
-

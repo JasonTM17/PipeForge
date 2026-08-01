@@ -9,4 +9,3 @@ CREATE TABLE IF NOT EXISTS platform_metadata (
 INSERT INTO platform_metadata (key, value)
 VALUES ('schema_owner', 'pipeforge-control-plane')
 ON CONFLICT (key) DO NOTHING;
-
