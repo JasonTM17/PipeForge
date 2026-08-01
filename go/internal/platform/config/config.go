@@ -62,9 +62,11 @@ func Load(getenv func(string) string) (Config, error) {
 	}
 	minioAccessKey := getenv("MINIO_ACCESS_KEY")
 	minioSecretKey := getenv("MINIO_SECRET_KEY")
+	minioEndpoint := getenv("MINIO_ENDPOINT")
 	if environment == "development" {
 		minioAccessKey = valueOrDefault(minioAccessKey, defaultDevelopmentMinIOKey)
 		minioSecretKey = valueOrDefault(minioSecretKey, defaultDevelopmentMinIOSecret)
+		minioEndpoint = valueOrDefault(minioEndpoint, "localhost:59010")
 	}
 	cfg := Config{
 		Environment:      environment,
@@ -79,7 +81,7 @@ func Load(getenv func(string) string) (Config, error) {
 		JWTSigningKey:    jwtSigningKey,
 		AccessTokenTTL:   defaultAccessTokenTTL,
 		RefreshTokenTTL:  defaultRefreshTokenTTL,
-		MinIOEndpoint:    valueOrDefault(getenv("MINIO_ENDPOINT"), "localhost:59010"),
+		MinIOEndpoint:    minioEndpoint,
 		MinIOAccessKey:   minioAccessKey,
 		MinIOSecretKey:   minioSecretKey,
 		DatasetBucket:    valueOrDefault(getenv("MINIO_DATASET_BUCKET"), defaultDatasetBucket),
@@ -150,8 +152,11 @@ func (c Config) validate() error {
 	if len(c.JWTSigningKey) < 32 {
 		return errors.New("JWT_SIGNING_KEY must be at least 32 bytes")
 	}
-	if strings.TrimSpace(c.MinIOEndpoint) == "" || strings.TrimSpace(c.MinIOAccessKey) == "" || strings.TrimSpace(c.MinIOSecretKey) == "" || strings.TrimSpace(c.DatasetBucket) == "" {
-		return errors.New("MinIO endpoint, credentials, and dataset bucket must not be empty")
+	if strings.TrimSpace(c.MinIOEndpoint) == "" {
+		return errors.New("MINIO_ENDPOINT must be set outside development")
+	}
+	if strings.TrimSpace(c.MinIOAccessKey) == "" || strings.TrimSpace(c.MinIOSecretKey) == "" || strings.TrimSpace(c.DatasetBucket) == "" {
+		return errors.New("MinIO credentials and dataset bucket must not be empty")
 	}
 	_, httpPort, err := net.SplitHostPort(c.HTTPAddr)
 	if err != nil {

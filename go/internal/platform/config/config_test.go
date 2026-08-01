@@ -63,6 +63,20 @@ func TestLoadRejectsShortJWTSigningKey(t *testing.T) {
 	}
 }
 
+func TestLoadRequiresMinIOEndpointOutsideDevelopment(t *testing.T) {
+	values := map[string]string{
+		"PIPEFORGE_ENV":        "production",
+		"JWT_SIGNING_KEY":      "production-signing-key-with-32-bytes!!",
+		"MINIO_ACCESS_KEY":     "access",
+		"MINIO_SECRET_KEY":     "secret",
+		"MINIO_DATASET_BUCKET": "datasets",
+	}
+	_, err := Load(func(key string) string { return values[key] })
+	if err == nil || !strings.Contains(err.Error(), "MINIO_ENDPOINT") {
+		t.Fatalf("expected explicit production MinIO endpoint error, got %v", err)
+	}
+}
+
 func TestLoadRejectsInvalidHTTPAddress(t *testing.T) {
 	_, err := Load(func(key string) string {
 		if key == "PIPEFORGE_HTTP_ADDR" {
