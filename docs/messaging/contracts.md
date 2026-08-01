@@ -35,3 +35,5 @@ The `processing.job.requested` payload accepts only the four operation types imp
 - Removing, renaming, or changing the meaning/type of a required field requires a new `schemaVersion` and a new message type migration path.
 - Producers publish only after local validation and with persistent delivery mode.
 - Consumers acknowledge only after the durable outcome is committed; malformed messages are rejected to a bounded DLQ path rather than endlessly requeued.
+
+The Python worker follows the same boundary: it validates the complete envelope and payload before dispatch, acknowledges only after the injected handler completes, and rejects malformed, unsupported, or failed commands with `requeue=false`. This makes broker dead-lettering the durable classification until the Go-owned lease/result workflow is available.

@@ -1,0 +1,11 @@
+.git
+.codex
+.claude
+python/.venv
+python/__pycache__
+python/.pytest_cache
+python/.mypy_cache
+python/.ruff_cache
+go/bin
+*.pyc
+*.log

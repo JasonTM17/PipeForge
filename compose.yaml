@@ -132,6 +132,45 @@ services:
       start_period: 10s
     restart: unless-stopped
 
+  worker:
+    build:
+      context: .
+      dockerfile: python/Dockerfile
+    profiles: [worker]
+    environment:
+      PIPEFORGE_WORKER_ENV: ${PIPEFORGE_ENV:-development}
+      PIPEFORGE_WORKER_LOG_LEVEL: ${PIPEFORGE_LOG_LEVEL:-info}
+      PIPEFORGE_WORKER_BROKER_URL: amqp://${RABBITMQ_USER:?RABBITMQ_USER is required}:${RABBITMQ_PASSWORD:?RABBITMQ_PASSWORD is required}@rabbitmq:5672/
+      PIPEFORGE_WORKER_QUEUE: ${PIPEFORGE_WORKER_QUEUE:-processing.jobs}
+      PIPEFORGE_WORKER_COMMANDS_EXCHANGE: ${PIPEFORGE_WORKER_COMMANDS_EXCHANGE:-pipeforge.commands}
+      PIPEFORGE_WORKER_EVENTS_EXCHANGE: ${PIPEFORGE_WORKER_EVENTS_EXCHANGE:-pipeforge.events}
+      PIPEFORGE_WORKER_MAX_CONCURRENCY: ${PIPEFORGE_WORKER_MAX_CONCURRENCY:-2}
+      PIPEFORGE_WORKER_PREFETCH: ${PIPEFORGE_WORKER_PREFETCH:-2}
+      PIPEFORGE_WORKER_HEARTBEAT_INTERVAL: ${PIPEFORGE_WORKER_HEARTBEAT_INTERVAL:-15}
+      PIPEFORGE_WORKER_HEALTH_ONLY: ${PIPEFORGE_WORKER_HEALTH_ONLY:-true}
+      PIPEFORGE_WORKER_HEALTH_HOST: 0.0.0.0
+      PIPEFORGE_WORKER_HEALTH_PORT: 8090
+      PIPEFORGE_WORKER_MINIO_ENDPOINT: minio:9000
+      PIPEFORGE_WORKER_MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY:?MINIO_ACCESS_KEY is required}
+      PIPEFORGE_WORKER_MINIO_SECRET_KEY: ${MINIO_SECRET_KEY:?MINIO_SECRET_KEY is required}
+      PIPEFORGE_WORKER_MINIO_SECURE: ${MINIO_SECURE:-false}
+      PIPEFORGE_WORKER_DATASET_BUCKET: ${MINIO_DATASET_BUCKET:-datasets}
+      PIPEFORGE_CONTRACTS_DIR: /opt/pipeforge/contracts/json-schema
+    ports:
+      - "${PIPEFORGE_WORKER_PORT:-58090}:8090"
+    depends_on:
+      rabbitmq-init:
+        condition: service_completed_successfully
+      minio-init:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8090/health/live', timeout=2)"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+      start_period: 10s
+    restart: unless-stopped
+
   scheduler:
     build:
       context: .
