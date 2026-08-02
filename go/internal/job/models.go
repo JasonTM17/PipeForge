@@ -170,10 +170,11 @@ func ValidateTransition(from, to string) error {
 		StateQueued: {
 			StateLeased:          {},
 			StateCancelRequested: {},
+			StateCancelled:       {},
 			StateFailedPermanent: {},
 		},
 		StateLeased: {
-			StateQueued:           {},
+			StateQueued:          {},
 			StateRunning:         {},
 			StateCancelRequested: {},
 			StateFailedRetryable: {},
@@ -181,7 +182,7 @@ func ValidateTransition(from, to string) error {
 			StateDeadLettered:    {},
 		},
 		StateRunning: {
-			StateQueued:           {},
+			StateQueued:          {},
 			StateSucceeded:       {},
 			StateFailedRetryable: {},
 			StateFailedPermanent: {},

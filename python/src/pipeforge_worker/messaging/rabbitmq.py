@@ -151,3 +151,27 @@ class RabbitConsumer(Consumer):
         self._queue = None
         self._consumer_tag = None
         self._in_flight.clear()
+
+
+class CompositeConsumer(Consumer):
+    """Start and drain multiple queues behind the runtime's one consumer boundary."""
+
+    def __init__(self, consumers: tuple[Consumer, ...]) -> None:
+        if not consumers:
+            raise ValueError("at least one consumer is required")
+        self._consumers = consumers
+
+    async def start(self, handler: MessageHandler) -> None:
+        started: list[Consumer] = []
+        try:
+            for consumer in self._consumers:
+                await consumer.start(handler)
+                started.append(consumer)
+        except Exception:
+            for consumer in reversed(started):
+                await consumer.stop()
+            raise
+
+    async def stop(self) -> None:
+        for consumer in reversed(self._consumers):
+            await consumer.stop()

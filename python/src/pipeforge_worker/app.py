@@ -16,11 +16,12 @@ from pipeforge_worker.messaging.protocols import (
     MessageHandler,
     Publisher,
 )
-from pipeforge_worker.messaging.rabbitmq import RabbitConsumer, RabbitPublisher
+from pipeforge_worker.messaging.rabbitmq import CompositeConsumer, RabbitConsumer, RabbitPublisher
 from pipeforge_worker.observability.health import HealthServer, HealthState
 from pipeforge_worker.observability.metrics import WorkerMetrics
 from pipeforge_worker.runtime import PingingObjectStore, WorkerRuntime
 from pipeforge_worker.storage.minio import MinioObjectStore, StoredObject
+from pipeforge_worker.worker.cancellation import CancellationRegistry
 from pipeforge_worker.worker.identity import HeartbeatController, WorkerIdentity
 from pipeforge_worker.worker.lifecycle import WorkerLifecycle
 
@@ -96,7 +97,7 @@ def build_runtime(settings: Settings) -> WorkerRuntime:
         settings.events_exchange,
         settings.reconnect_delay_seconds,
     )
-    consumer = RabbitConsumer(
+    job_consumer = RabbitConsumer(
         settings.broker_url,
         settings.broker_queue,
         settings.prefetch_count,
@@ -106,6 +107,17 @@ def build_runtime(settings: Settings) -> WorkerRuntime:
         },
         settings.reconnect_delay_seconds,
     )
+    cancellation_consumer = RabbitConsumer(
+        settings.broker_url,
+        settings.cancellation_queue,
+        settings.prefetch_count,
+        {
+            "x-dead-letter-exchange": settings.dead_letter_exchange,
+            "x-dead-letter-routing-key": settings.cancellation_dead_letter_routing_key,
+        },
+        settings.reconnect_delay_seconds,
+    )
+    consumer = CompositeConsumer((job_consumer, cancellation_consumer))
     storage = MinioObjectStore(
         settings.minio_endpoint,
         settings.minio_access_key,
@@ -121,7 +133,12 @@ def build_runtime(settings: Settings) -> WorkerRuntime:
         settings.events_exchange,
         settings.heartbeat_interval_seconds,
     )
-    command_consumer = JobCommandConsumer(validator, RejectingJobHandler(), metrics)
+    command_consumer = JobCommandConsumer(
+        validator,
+        RejectingJobHandler(),
+        metrics,
+        cancellation_registry=CancellationRegistry(),
+    )
     return WorkerRuntime(
         settings,
         publisher,

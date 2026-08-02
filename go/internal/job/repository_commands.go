@@ -46,21 +46,63 @@ func (r *Repository) RequestCancel(ctx context.Context, command CancelCommand) (
 		return Job{}, fmt.Errorf("%w: cancellation reason is too long", ErrInvalidInput)
 	}
 	now := time.Now().UTC()
+	if item.State == StateQueued {
+		if _, err := tx.Exec(ctx, `
+UPDATE processing_jobs
+SET state = $2, cancel_requested_at = $3, completed_at = $3, finished_at = $3, next_attempt_at = NULL, updated_at = $3
+WHERE id = $1`, item.ID, StateCancelled, now); err != nil {
+			return Job{}, fmt.Errorf("cancel queued job: %w", err)
+		}
+		if _, err := tx.Exec(ctx, `
+UPDATE job_attempts
+SET state = $2, finished_at = $3
+WHERE id = (
+    SELECT id FROM job_attempts
+    WHERE job_id = $1
+    ORDER BY attempt_number DESC, id DESC
+    LIMIT 1
+)`, item.ID, AttemptCancelled, now); err != nil {
+			return Job{}, fmt.Errorf("cancel queued job attempt: %w", err)
+		}
+		if _, err := tx.Exec(ctx, `
+INSERT INTO job_result_projections (job_id, attempt_id, outcome, artifact_keys, error_code, error_message, retryable)
+SELECT $1, id, 'CANCELLED', '[]'::jsonb, 'CANCELLED', $2, FALSE
+FROM job_attempts
+WHERE job_id = $1
+ORDER BY attempt_number DESC, id DESC
+LIMIT 1
+ON CONFLICT (job_id, attempt_id) DO NOTHING`, item.ID, reason); err != nil {
+			return Job{}, fmt.Errorf("record queued cancellation result: %w", err)
+		}
+		if err := decrementQuota(ctx, tx, item.OwnerUserID); err != nil {
+			return Job{}, err
+		}
+		if err := recordHistory(ctx, tx, item.ID, item.State, StateCancelled, "cancelled_before_lease", command.ActorUserID); err != nil {
+			return Job{}, err
+		}
+		updated, err := getJobTx(ctx, tx, item.ID, false)
+		if err != nil {
+			return Job{}, err
+		}
+		if err := tx.Commit(ctx); err != nil {
+			return Job{}, fmt.Errorf("commit queued job cancellation: %w", err)
+		}
+		return updated, nil
+	}
+	target, err := currentCancellationTarget(ctx, tx, item.ID)
+	if err != nil {
+		return Job{}, err
+	}
 	if _, err := tx.Exec(ctx, `
 UPDATE processing_jobs
 SET state = $2, cancel_requested_at = $3, updated_at = $3
 WHERE id = $1`, item.ID, StateCancelRequested, now); err != nil {
 		return Job{}, fmt.Errorf("request job cancellation: %w", err)
 	}
-	if item.State == StateQueued {
-		if err := decrementQuota(ctx, tx, item.OwnerUserID); err != nil {
-			return Job{}, err
-		}
-	}
 	if err := recordHistory(ctx, tx, item.ID, item.State, StateCancelRequested, "cancel_requested", command.ActorUserID); err != nil {
 		return Job{}, err
 	}
-	if err := enqueueCancel(ctx, tx, r.outbox, item, reason, command); err != nil {
+	if err := enqueueCancel(ctx, tx, r.outbox, item, target, reason, command); err != nil {
 		return Job{}, err
 	}
 	updated, err := getJobTx(ctx, tx, item.ID, false)
@@ -71,6 +113,31 @@ WHERE id = $1`, item.ID, StateCancelRequested, now); err != nil {
 		return Job{}, fmt.Errorf("commit job cancellation: %w", err)
 	}
 	return updated, nil
+}
+
+type cancellationTarget struct {
+	AttemptID uuid.UUID
+	LeaseID   uuid.UUID
+}
+
+func currentCancellationTarget(ctx context.Context, tx pgx.Tx, jobID uuid.UUID) (cancellationTarget, error) {
+	var target cancellationTarget
+	var attemptState string
+	var leaseID *uuid.UUID
+	if err := tx.QueryRow(ctx, `
+SELECT id, lease_id, state
+FROM job_attempts
+WHERE job_id = $1
+ORDER BY attempt_number DESC, id DESC
+LIMIT 1
+FOR UPDATE`, jobID).Scan(&target.AttemptID, &leaseID, &attemptState); err != nil {
+		return cancellationTarget{}, fmt.Errorf("lock current job attempt for cancellation: %w", err)
+	}
+	if (attemptState != AttemptLeased && attemptState != AttemptRunning) || leaseID == nil || *leaseID == uuid.Nil {
+		return cancellationTarget{}, fmt.Errorf("%w: active job has no cancellable lease", ErrJobState)
+	}
+	target.LeaseID = *leaseID
+	return target, nil
 }
 
 func (r *Repository) RequestRetry(ctx context.Context, command RetryCommand) (Job, error) {
@@ -147,12 +214,14 @@ WHERE owner_user_id = $1`, ownerID); err != nil {
 	return nil
 }
 
-func enqueueCancel(ctx context.Context, tx pgx.Tx, writer outbox.Enqueuer, item Job, reason string, command CancelCommand) error {
+func enqueueCancel(ctx context.Context, tx pgx.Tx, writer outbox.Enqueuer, item Job, target cancellationTarget, reason string, command CancelCommand) error {
 	traceID := valueOrDefault(command.TraceID, item.ID.String())
 	envelope, err := queue.NewEnvelope(queue.MessageJobCancel, traceID, item.ID.String(), valueOrDefault(command.RequestID, traceID), struct {
-		JobID  uuid.UUID `json:"jobId"`
-		Reason string    `json:"reason"`
-	}{JobID: item.ID, Reason: reason})
+		JobID     uuid.UUID `json:"jobId"`
+		AttemptID uuid.UUID `json:"attemptId"`
+		LeaseID   uuid.UUID `json:"leaseId"`
+		Reason    string    `json:"reason"`
+	}{JobID: item.ID, AttemptID: target.AttemptID, LeaseID: target.LeaseID, Reason: reason})
 	if err != nil {
 		return fmt.Errorf("create cancellation envelope: %w", err)
 	}

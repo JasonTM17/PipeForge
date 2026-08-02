@@ -7,8 +7,8 @@ from contextlib import AbstractContextManager, contextmanager
 from typing import BinaryIO, cast
 
 import polars as pl
-import pyarrow as pa  # type: ignore[import-untyped]
-import pyarrow.parquet as pq  # type: ignore[import-untyped]
+import pyarrow as pa
+import pyarrow.parquet as pq
 
 from pipeforge_worker.readers.detection import detect_format
 from pipeforge_worker.readers.models import (

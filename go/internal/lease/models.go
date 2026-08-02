@@ -51,6 +51,7 @@ type SweepReport struct {
 	Claimed      int
 	Retried      int
 	DeadLettered int
+	Cancelled    int
 	Skipped      int
 }
 
