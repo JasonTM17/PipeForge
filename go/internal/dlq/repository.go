@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/JasonTM17/PipeForge/go/internal/authz"
 	"github.com/JasonTM17/PipeForge/go/internal/job"
 	"github.com/JasonTM17/PipeForge/go/internal/outbox"
 	"github.com/JasonTM17/PipeForge/go/internal/queue"
@@ -107,7 +108,7 @@ FOR UPDATE OF d, j`, command.RecordID).Scan(
 		return ReplayResult{}, fmt.Errorf("lock dead-letter replay: %w", err)
 	}
 	if !command.AllowCrossOwner && record.OwnerUserID != command.ActorUserID {
-		return ReplayResult{}, errors.New("dead-letter owner mismatch")
+		return ReplayResult{}, authz.ErrForbidden
 	}
 	if record.ReplayedAt != nil {
 		return ReplayResult{}, ErrAlreadyReplayed
@@ -131,9 +132,6 @@ FOR UPDATE OF d, j`, command.RecordID).Scan(
 	}
 	if _, err := tx.Exec(ctx, `UPDATE processing_jobs SET state = $2, next_attempt_at = NULL, queued_at = $3, updated_at = $3, last_error_code = NULL, last_error_message = NULL WHERE id = $1`, record.JobID, job.StateQueued, now); err != nil {
 		return ReplayResult{}, fmt.Errorf("queue replayed job: %w", err)
-	}
-	if _, err := tx.Exec(ctx, `UPDATE job_quota_counters SET active_count = active_count, updated_at = $2 WHERE owner_user_id = $1`, record.OwnerUserID, now); err != nil {
-		return ReplayResult{}, fmt.Errorf("update replay quota: %w", err)
 	}
 	if _, err := tx.Exec(ctx, `UPDATE job_dead_letters SET replayed_at = $2, replayed_by = $3 WHERE id = $1`, record.ID, now, command.ActorUserID); err != nil {
 		return ReplayResult{}, fmt.Errorf("mark dead letter replayed: %w", err)

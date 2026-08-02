@@ -91,16 +91,15 @@ func (r *Repository) Acquire(ctx context.Context, command AcquireCommand) (Lease
 	defer func() { _ = tx.Rollback(ctx) }()
 
 	var item leaseCandidate
-	var operations []byte
 	err = tx.QueryRow(ctx, `
-SELECT j.id, j.state, j.next_attempt_at, j.max_attempts, j.dataset_version_id, j.operations,
+SELECT j.id, j.state, j.next_attempt_at, j.max_attempts, j.dataset_version_id,
        a.id, a.attempt_number, a.state
 FROM processing_jobs j
 JOIN job_attempts a ON a.job_id = j.id
 WHERE j.id = $1
   AND a.attempt_number = (SELECT MAX(attempt_number) FROM job_attempts WHERE job_id = j.id)
-FOR UPDATE OF j, a`, command.JobID).Scan(
-		&item.JobID, &item.JobState, &item.NextAttemptAt, &item.MaxAttempts, &item.DatasetVersionID, &operations,
+	FOR UPDATE OF j, a`, command.JobID).Scan(
+		&item.JobID, &item.JobState, &item.NextAttemptAt, &item.MaxAttempts, &item.DatasetVersionID,
 		&item.AttemptID, &item.AttemptNumber, &item.AttemptState,
 	)
 	if errors.Is(err, pgx.ErrNoRows) {
