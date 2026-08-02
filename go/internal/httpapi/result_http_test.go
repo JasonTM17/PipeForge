@@ -55,9 +55,42 @@ func TestArtifactHTTPRoutesEnforceOwnershipAndStreamCanonicalObjects(t *testing.
 	}
 }
 
+func TestProgressHTTPRoutesEnforceOwnershipAndExposeHistory(t *testing.T) {
+	identityStore := newHTTPMemoryStore()
+	identityService := newHTTPIdentityService(t, identityStore)
+	ownerTokens := registerHTTPUser(t, identityService, "progress-owner@example.com")
+	otherTokens := registerHTTPUser(t, identityService, "progress-other@example.com")
+	jobID := uuid.New()
+	store := &httpResultStore{
+		artifacts: map[uuid.UUID]result.Artifact{},
+		progress: map[uuid.UUID]result.ProgressSnapshot{
+			jobID: {OwnerUserID: ownerTokens.User.ID, JobID: jobID, AttemptID: uuid.New(), Stage: "PROCESS", ProcessedRows: 20, ProgressPercent: 50, Throughput: 10},
+		},
+	}
+	service, err := result.NewService(store, httpResultObjects{content: "profile"})
+	if err != nil {
+		t.Fatalf("NewService returned error: %v", err)
+	}
+	router := NewRouter(Dependencies{Identity: identityService, Result: service})
+
+	latest := performJSONRequest(router, "GET", "/api/v1/jobs/"+jobID.String()+"/progress", "", ownerTokens.AccessToken)
+	if latest.Code != 200 || !containsJSON(latest.Body.String(), `"progressPercent":50`) {
+		t.Fatalf("progress snapshot failed: %d %s", latest.Code, latest.Body.String())
+	}
+	history := performJSONRequest(router, "GET", "/v1/jobs/"+jobID.String()+"/progress/history?page=1&pageSize=10", "", ownerTokens.AccessToken)
+	if history.Code != 200 || !containsJSON(history.Body.String(), `"total":1`) {
+		t.Fatalf("progress history failed: %d %s", history.Code, history.Body.String())
+	}
+	crossOwner := performJSONRequest(router, "GET", "/v1/jobs/"+jobID.String()+"/progress", "", otherTokens.AccessToken)
+	if crossOwner.Code != 404 {
+		t.Fatalf("cross-owner progress access was not hidden: %d %s", crossOwner.Code, crossOwner.Body.String())
+	}
+}
+
 type httpResultStore struct {
 	mu        sync.Mutex
 	artifacts map[uuid.UUID]result.Artifact
+	progress  map[uuid.UUID]result.ProgressSnapshot
 }
 
 func (s *httpResultStore) Process(context.Context, queue.Envelope) (result.Outcome, error) {
@@ -86,6 +119,26 @@ func (s *httpResultStore) GetArtifact(_ context.Context, artifactID uuid.UUID) (
 		return result.Artifact{}, result.ErrArtifactNotFound
 	}
 	return item, nil
+}
+
+func (s *httpResultStore) GetProgress(_ context.Context, query result.ProgressQuery) (result.ProgressSnapshot, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	item, ok := s.progress[query.JobID]
+	if !ok || query.OwnerUserID != nil && item.OwnerUserID != *query.OwnerUserID {
+		return result.ProgressSnapshot{}, result.ErrProgressNotFound
+	}
+	return item, nil
+}
+
+func (s *httpResultStore) ListProgress(_ context.Context, query result.ProgressQuery) (result.ProgressPage, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	item, ok := s.progress[query.JobID]
+	if !ok || query.OwnerUserID != nil && item.OwnerUserID != *query.OwnerUserID {
+		return result.ProgressPage{Items: []result.ProgressSnapshot{}, Page: query.Page, PageSize: query.PageSize}, nil
+	}
+	return result.ProgressPage{Items: []result.ProgressSnapshot{item}, Page: query.Page, PageSize: query.PageSize, Total: 1}, nil
 }
 
 type httpResultObjects struct{ content string }

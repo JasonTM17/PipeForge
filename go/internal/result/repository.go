@@ -142,6 +142,9 @@ VALUES ($1, NULLIF($2, ''), $3, $4, NULL)`, jobID, fromState, toState, truncateT
 }
 
 func insertResultProjection(ctx context.Context, tx pgx.Tx, jobID, attemptID uuid.UUID, outcome string, artifactKeys []string, failure *FailureInfo) error {
+	if artifactKeys == nil {
+		artifactKeys = []string{}
+	}
 	encoded, err := json.Marshal(artifactKeys)
 	if err != nil {
 		return fmt.Errorf("marshal result artifact keys: %w", err)

@@ -56,6 +56,14 @@ type FailedEvent struct {
 	Error     FailureInfo `json:"error"`
 }
 
+type CancelledEvent struct {
+	JobID     uuid.UUID `json:"jobId"`
+	AttemptID uuid.UUID `json:"attemptId"`
+	LeaseID   uuid.UUID `json:"leaseId"`
+	WorkerID  uuid.UUID `json:"workerId"`
+	Reason    string    `json:"reason"`
+}
+
 type FailureInfo struct {
 	Code          string  `json:"code"`
 	Message       string  `json:"message"`
@@ -89,6 +97,8 @@ func DecodeEvent(envelope queue.Envelope) (any, error) {
 		event = &SucceededEvent{}
 	case queue.MessageJobFailed:
 		event = &FailedEvent{}
+	case queue.MessageJobCancelled:
+		event = &CancelledEvent{}
 	case queue.MessageArtifactCreated:
 		event = &ArtifactCreatedEvent{}
 	default:
@@ -131,6 +141,9 @@ func validateEvent(event any) error {
 		if typed.EstimatedTotalRows != nil && *typed.EstimatedTotalRows < 0 {
 			return fmt.Errorf("estimatedTotalRows must not be negative")
 		}
+		if typed.EstimatedTotalRows != nil && *typed.EstimatedTotalRows < typed.ProcessedRows {
+			return fmt.Errorf("estimatedTotalRows must not be less than processedRows")
+		}
 	case *SucceededEvent:
 		if err := validateAttemptIdentity(typed.JobID, typed.AttemptID, typed.LeaseID, typed.WorkerID); err != nil {
 			return err
@@ -156,6 +169,13 @@ func validateEvent(event any) error {
 		}
 		if typed.Error.DiagnosticRef != nil && len(*typed.Error.DiagnosticRef) > 512 {
 			return fmt.Errorf("diagnosticRef is too long")
+		}
+	case *CancelledEvent:
+		if err := validateAttemptIdentity(typed.JobID, typed.AttemptID, typed.LeaseID, typed.WorkerID); err != nil {
+			return err
+		}
+		if typed.WorkerID == uuid.Nil || strings.TrimSpace(typed.Reason) == "" || len(typed.Reason) > 500 {
+			return fmt.Errorf("cancellation fields are invalid")
 		}
 	case *ArtifactCreatedEvent:
 		if err := validateAttemptIdentity(typed.JobID, typed.AttemptID, typed.LeaseID, uuid.Nil); err != nil {

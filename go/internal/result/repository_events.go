@@ -22,6 +22,8 @@ func (r *Repository) applyEvent(ctx context.Context, tx pgx.Tx, envelope queue.E
 		return r.applySucceeded(ctx, tx, *typed)
 	case *FailedEvent:
 		return r.applyFailed(ctx, tx, *typed)
+	case *CancelledEvent:
+		return r.applyCancelled(ctx, tx, *typed)
 	case *ArtifactCreatedEvent:
 		return r.applyArtifact(ctx, tx, *typed)
 	default:
@@ -81,12 +83,31 @@ ON CONFLICT (job_id) DO UPDATE SET attempt_id = EXCLUDED.attempt_id, lease_id = 
     stage = EXCLUDED.stage, processed_rows = EXCLUDED.processed_rows, estimated_total_rows = EXCLUDED.estimated_total_rows,
     progress_percent = EXCLUDED.progress_percent, throughput = EXCLUDED.throughput, updated_at = EXCLUDED.updated_at,
     received_at = NOW()
-WHERE job_progress_snapshots.updated_at <= EXCLUDED.updated_at`, event.JobID, event.AttemptID, event.LeaseID, event.Stage, event.ProcessedRows, event.EstimatedTotalRows, event.ProgressPercent, event.Throughput, event.UpdatedAt)
+WHERE job_progress_snapshots.attempt_id <> EXCLUDED.attempt_id
+   OR (EXCLUDED.updated_at > job_progress_snapshots.updated_at
+       AND EXCLUDED.processed_rows >= job_progress_snapshots.processed_rows
+       AND EXCLUDED.progress_percent >= job_progress_snapshots.progress_percent)`, event.JobID, event.AttemptID, event.LeaseID, event.Stage, event.ProcessedRows, event.EstimatedTotalRows, event.ProgressPercent, event.Throughput, event.UpdatedAt)
 	if err != nil {
 		return "", "", fmt.Errorf("persist job progress: %w", err)
 	}
 	if result.RowsAffected() == 0 {
 		return OutcomeIgnored, "stale_progress", nil
+	}
+	if _, err := tx.Exec(ctx, `
+INSERT INTO job_progress_history (job_id, attempt_id, lease_id, stage, processed_rows, estimated_total_rows, progress_percent, throughput, updated_at)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`, event.JobID, event.AttemptID, event.LeaseID, event.Stage, event.ProcessedRows, event.EstimatedTotalRows, event.ProgressPercent, event.Throughput, event.UpdatedAt); err != nil {
+		return "", "", fmt.Errorf("persist progress history: %w", err)
+	}
+	if _, err := tx.Exec(ctx, `
+DELETE FROM job_progress_history
+WHERE job_id = $1
+  AND id NOT IN (
+      SELECT id FROM job_progress_history
+      WHERE job_id = $1
+      ORDER BY updated_at DESC, id DESC
+      LIMIT 100
+  )`, event.JobID); err != nil {
+		return "", "", fmt.Errorf("trim progress history: %w", err)
 	}
 	return OutcomeApplied, "progressed", nil
 }
@@ -210,6 +231,39 @@ ON CONFLICT (job_id, attempt_id) DO NOTHING`, uuid.New(), event.JobID, event.Att
 		return "", "", err
 	}
 	return OutcomeApplied, reason, nil
+}
+
+func (r *Repository) applyCancelled(ctx context.Context, tx pgx.Tx, event CancelledEvent) (string, string, error) {
+	item, err := lockAttempt(ctx, tx, event.JobID, event.AttemptID)
+	if err != nil {
+		return "", "", err
+	}
+	if item.JobID == uuid.Nil {
+		return OutcomeIgnored, "attempt_not_found", nil
+	}
+	if !matchesLease(item, event.LeaseID, event.WorkerID) {
+		return OutcomeIgnored, "stale_or_wrong_lease", nil
+	}
+	if item.JobState != job.StateCancelRequested || (item.AttemptState != job.AttemptLeased && item.AttemptState != job.AttemptRunning) {
+		return OutcomeIgnored, "cancellation_for_non_requested_attempt", nil
+	}
+	now := time.Now().UTC()
+	if _, err := tx.Exec(ctx, `UPDATE job_attempts SET state = $2, finished_at = $3, error_code = NULL, error_message = NULL WHERE id = $1`, event.AttemptID, job.AttemptCancelled, now); err != nil {
+		return "", "", fmt.Errorf("mark attempt cancelled: %w", err)
+	}
+	if _, err := tx.Exec(ctx, `UPDATE processing_jobs SET state = $2, completed_at = $3, finished_at = $3, updated_at = $3, last_error_code = NULL, last_error_message = NULL WHERE id = $1`, event.JobID, job.StateCancelled, now); err != nil {
+		return "", "", fmt.Errorf("mark job cancelled: %w", err)
+	}
+	if _, err := tx.Exec(ctx, `UPDATE job_quota_counters SET active_count = GREATEST(active_count - 1, 0), updated_at = $2 WHERE owner_user_id = $1`, item.OwnerUserID, now); err != nil {
+		return "", "", fmt.Errorf("update cancelled job quota: %w", err)
+	}
+	if err := insertResultProjection(ctx, tx, event.JobID, event.AttemptID, "CANCELLED", nil, &FailureInfo{Code: "CANCELLED", Message: truncateText(event.Reason, 500), Retryable: false}); err != nil {
+		return "", "", err
+	}
+	if err := recordHistory(ctx, tx, event.JobID, job.StateCancelRequested, job.StateCancelled, "worker_cancelled"); err != nil {
+		return "", "", err
+	}
+	return OutcomeApplied, "cancelled", nil
 }
 
 func enqueueResultRetry(ctx context.Context, tx pgx.Tx, writer outbox.Enqueuer, item attemptContext, availableAt time.Time) error {
