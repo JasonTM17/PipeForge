@@ -75,6 +75,13 @@ func TestRepositoryAppliesAndDeduplicatesResultEvents(t *testing.T) {
 	if jobState != "SUCCEEDED" || attemptState != "SUCCEEDED" || artifactState != "CANONICAL" {
 		t.Fatalf("result transition incomplete: job=%s attempt=%s artifact=%s", jobState, attemptState, artifactState)
 	}
+	var activeCount int
+	if err := pool.QueryRow(ctx, `SELECT active_count FROM job_quota_counters WHERE owner_user_id = $1`, ownerID).Scan(&activeCount); err != nil {
+		t.Fatal(err)
+	}
+	if activeCount != 0 {
+		t.Fatalf("successful job kept an active quota slot: active=%d", activeCount)
+	}
 
 	var inboxCount, historyCount int
 	if err := pool.QueryRow(ctx, `SELECT COUNT(*) FROM inbox_messages WHERE message_id IN ($1, $2)`, artifactEnvelope.MessageID, succeededEnvelope.MessageID).Scan(&inboxCount); err != nil {

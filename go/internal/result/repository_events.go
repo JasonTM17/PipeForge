@@ -112,6 +112,9 @@ func (r *Repository) applySucceeded(ctx context.Context, tx pgx.Tx, event Succee
 	if _, err := tx.Exec(ctx, `UPDATE job_attempts SET state = $2, finished_at = $3 WHERE id = $1`, event.AttemptID, job.AttemptSucceeded, now); err != nil {
 		return "", "", fmt.Errorf("mark attempt succeeded: %w", err)
 	}
+	if _, err := tx.Exec(ctx, `UPDATE job_quota_counters SET active_count = GREATEST(active_count - 1, 0), updated_at = $2 WHERE owner_user_id = $1`, item.OwnerUserID, now); err != nil {
+		return "", "", fmt.Errorf("update succeeded job quota: %w", err)
+	}
 	if err := recordHistory(ctx, tx, event.JobID, job.StateRunning, job.StateSucceeded, "worker_succeeded"); err != nil {
 		return "", "", err
 	}
