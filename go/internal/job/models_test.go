@@ -9,6 +9,7 @@ func TestValidateTransitionTable(t *testing.T) {
 	valid := [][2]string{
 		{StateCreated, StateQueued},
 		{StateQueued, StateLeased},
+		{StateQueued, StateCancelled},
 		{StateRunning, StateSucceeded},
 		{StateRunning, StateFailedRetryable},
 		{StateFailedRetryable, StateQueued},

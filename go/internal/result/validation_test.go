@@ -20,6 +20,7 @@ func TestDecodeEventAcceptsSupportedResultEvents(t *testing.T) {
 		{name: "progressed", kind: queue.MessageJobProgressed, payload: ProgressedEvent{JobID: ids["job"], AttemptID: ids["attempt"], LeaseID: ids["lease"], Stage: "PROFILE", ProcessedRows: 10, ProgressPercent: 50, UpdatedAt: time.Now().UTC()}},
 		{name: "succeeded", kind: queue.MessageJobSucceeded, payload: SucceededEvent{JobID: ids["job"], AttemptID: ids["attempt"], LeaseID: ids["lease"], WorkerID: ids["worker"], Artifacts: []string{"reports/profile.json"}}},
 		{name: "failed", kind: queue.MessageJobFailed, payload: FailedEvent{JobID: ids["job"], AttemptID: ids["attempt"], LeaseID: ids["lease"], WorkerID: ids["worker"], Error: FailureInfo{Code: "INPUT_INVALID", Message: "invalid input", Retryable: false}}},
+		{name: "cancelled", kind: queue.MessageJobCancelled, payload: CancelledEvent{JobID: ids["job"], AttemptID: ids["attempt"], LeaseID: ids["lease"], WorkerID: ids["worker"], Reason: "owner_requested"}},
 		{name: "artifact", kind: queue.MessageArtifactCreated, payload: ArtifactCreatedEvent{JobID: ids["job"], AttemptID: ids["attempt"], LeaseID: ids["lease"], ArtifactID: ids["artifact"], Kind: "profile", ObjectKey: "reports/profile.json", SizeBytes: 10, ContentType: "application/json", ChecksumSHA256: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"}},
 	}
 	for _, testCase := range cases {
@@ -67,5 +68,19 @@ func TestDecodeEventRejectsTrailingJSONValue(t *testing.T) {
 	envelope := queue.Envelope{MessageID: uuid.New(), MessageType: queue.MessageJobStarted, SchemaVersion: 1, OccurredAt: time.Now().UTC(), TraceID: "trace", CorrelationID: "correlation", CausationID: "causation", Payload: append(payload, []byte(" ")...)}
 	if _, err := DecodeEvent(envelope); err != nil {
 		t.Fatalf("whitespace after payload should be accepted: %v", err)
+	}
+}
+
+func TestDecodeEventRejectsProgressWithImpossibleEstimate(t *testing.T) {
+	estimate := int64(10)
+	envelope, err := queue.NewEnvelope(queue.MessageJobProgressed, "trace", "correlation", "causation", ProgressedEvent{
+		JobID: uuid.New(), AttemptID: uuid.New(), LeaseID: uuid.New(), Stage: "PROCESS",
+		ProcessedRows: 11, EstimatedTotalRows: &estimate, ProgressPercent: 100, UpdatedAt: time.Now().UTC(),
+	})
+	if err != nil {
+		t.Fatalf("NewEnvelope rejected an event before result validation: %v", err)
+	}
+	if _, err := DecodeEvent(envelope); err == nil {
+		t.Fatal("DecodeEvent accepted an impossible progress estimate")
 	}
 }

@@ -85,7 +85,7 @@ func TestRepositoryCreatesAtomicIdempotentJobAndOutbox(t *testing.T) {
 		t.Fatalf("SelectQueued returned jobs=%+v err=%v", queued, err)
 	}
 	cancelled, err := repository.RequestCancel(ctx, CancelCommand{JobID: created.ID, ActorUserID: ownerID, TraceID: "cancel-trace", RequestID: "cancel-request"})
-	if err != nil || cancelled.State != StateCancelRequested {
+	if err != nil || cancelled.State != StateCancelled {
 		t.Fatalf("RequestCancel returned job=%+v err=%v", cancelled, err)
 	}
 	queued, err = repository.SelectQueued(ctx, QueueQuery{Limit: 10})

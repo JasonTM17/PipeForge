@@ -143,6 +143,118 @@ func TestRepositorySchedulesRetryableFailureThroughDelayedOutbox(t *testing.T) {
 	}
 }
 
+func TestRepositoryStoresOnlyMonotonicCurrentAttemptProgress(t *testing.T) {
+	dsn := os.Getenv("PIPEFORGE_TEST_DATABASE_URL")
+	if dsn == "" {
+		t.Skip("PIPEFORGE_TEST_DATABASE_URL is not set")
+	}
+	ctx := context.Background()
+	pool, err := pgxpool.New(ctx, dsn)
+	if err != nil {
+		t.Fatalf("pgxpool.New returned error: %v", err)
+	}
+	defer pool.Close()
+	repository, err := NewRepository(pool)
+	if err != nil {
+		t.Fatalf("NewRepository returned error: %v", err)
+	}
+	ownerID, datasetID, versionID := uuid.New(), uuid.New(), uuid.New()
+	jobID, attemptID, leaseID, workerID := uuid.New(), uuid.New(), uuid.New(), uuid.New()
+	insertResultFixture(t, ctx, pool, ownerID, datasetID, versionID, jobID, attemptID, leaseID, workerID)
+	defer cleanupResultFixture(t, ctx, pool, ownerID, datasetID, jobID)
+
+	base := time.Now().UTC()
+	for index, event := range []ProgressedEvent{
+		{JobID: jobID, AttemptID: attemptID, LeaseID: leaseID, Stage: "PROCESS", ProcessedRows: 10, EstimatedTotalRows: int64Pointer(100), ProgressPercent: 10, UpdatedAt: base},
+		{JobID: jobID, AttemptID: attemptID, LeaseID: leaseID, Stage: "PROCESS", ProcessedRows: 5, EstimatedTotalRows: int64Pointer(100), ProgressPercent: 5, UpdatedAt: base.Add(time.Minute)},
+		{JobID: jobID, AttemptID: attemptID, LeaseID: leaseID, Stage: "PROCESS", ProcessedRows: 20, EstimatedTotalRows: int64Pointer(100), ProgressPercent: 20, UpdatedAt: base.Add(2 * time.Minute)},
+	} {
+		envelope, envelopeErr := queue.NewEnvelope(queue.MessageJobProgressed, "trace", jobID.String(), fmt.Sprintf("progress-%d", index), event)
+		if envelopeErr != nil {
+			t.Fatalf("progress envelope %d: %v", index, envelopeErr)
+		}
+		outcome, processErr := repository.Process(ctx, envelope)
+		if processErr != nil {
+			t.Fatalf("progress event %d returned error: %v", index, processErr)
+		}
+		want := OutcomeApplied
+		if index == 1 {
+			want = OutcomeIgnored
+		}
+		if outcome.Status != want {
+			t.Fatalf("progress event %d outcome=%+v, want %s", index, outcome, want)
+		}
+	}
+
+	var processed int64
+	if err := pool.QueryRow(ctx, `SELECT processed_rows FROM job_progress_snapshots WHERE job_id = $1`, jobID).Scan(&processed); err != nil {
+		t.Fatal(err)
+	}
+	var historyCount int
+	if err := pool.QueryRow(ctx, `SELECT COUNT(*) FROM job_progress_history WHERE job_id = $1`, jobID).Scan(&historyCount); err != nil {
+		t.Fatal(err)
+	}
+	if processed != 20 || historyCount != 2 {
+		t.Fatalf("progress regressed or history was not bounded: processed=%d history=%d", processed, historyCount)
+	}
+}
+
+func TestRepositoryAppliesCancellationOnlyToRequestedCurrentAttempt(t *testing.T) {
+	dsn := os.Getenv("PIPEFORGE_TEST_DATABASE_URL")
+	if dsn == "" {
+		t.Skip("PIPEFORGE_TEST_DATABASE_URL is not set")
+	}
+	ctx := context.Background()
+	pool, err := pgxpool.New(ctx, dsn)
+	if err != nil {
+		t.Fatalf("pgxpool.New returned error: %v", err)
+	}
+	defer pool.Close()
+	repository, err := NewRepository(pool)
+	if err != nil {
+		t.Fatalf("NewRepository returned error: %v", err)
+	}
+	ownerID, datasetID, versionID := uuid.New(), uuid.New(), uuid.New()
+	jobID, attemptID, leaseID, workerID := uuid.New(), uuid.New(), uuid.New(), uuid.New()
+	insertResultFixture(t, ctx, pool, ownerID, datasetID, versionID, jobID, attemptID, leaseID, workerID)
+	defer cleanupResultFixture(t, ctx, pool, ownerID, datasetID, jobID)
+	if _, err := pool.Exec(ctx, `UPDATE processing_jobs SET state = 'CANCEL_REQUESTED', cancel_requested_at = NOW() WHERE id = $1`, jobID); err != nil {
+		t.Fatal(err)
+	}
+
+	event, err := queue.NewEnvelope(queue.MessageJobCancelled, "trace", jobID.String(), "cancel-command", CancelledEvent{
+		JobID: jobID, AttemptID: attemptID, LeaseID: leaseID, WorkerID: workerID, Reason: "owner_requested",
+	})
+	if err != nil {
+		t.Fatalf("cancellation envelope: %v", err)
+	}
+	outcome, err := repository.Process(ctx, event)
+	if err != nil || outcome.Status != OutcomeApplied {
+		t.Fatalf("cancellation outcome=%+v err=%v", outcome, err)
+	}
+	var jobState, attemptState string
+	if err := pool.QueryRow(ctx, `SELECT state FROM processing_jobs WHERE id = $1`, jobID).Scan(&jobState); err != nil {
+		t.Fatal(err)
+	}
+	if err := pool.QueryRow(ctx, `SELECT state FROM job_attempts WHERE id = $1`, attemptID).Scan(&attemptState); err != nil {
+		t.Fatal(err)
+	}
+	var activeCount int
+	if err := pool.QueryRow(ctx, `SELECT active_count FROM job_quota_counters WHERE owner_user_id = $1`, ownerID).Scan(&activeCount); err != nil {
+		t.Fatal(err)
+	}
+	if jobState != "CANCELLED" || attemptState != "CANCELLED" || activeCount != 0 {
+		t.Fatalf("cancellation transition incomplete: job=%s attempt=%s active=%d", jobState, attemptState, activeCount)
+	}
+	var projectionOutcome, artifactKeysType string
+	if err := pool.QueryRow(ctx, `SELECT outcome, jsonb_typeof(artifact_keys) FROM job_result_projections WHERE job_id = $1 AND attempt_id = $2`, jobID, attemptID).Scan(&projectionOutcome, &artifactKeysType); err != nil {
+		t.Fatal(err)
+	}
+	if projectionOutcome != "CANCELLED" || artifactKeysType != "array" {
+		t.Fatalf("cancellation result projection incomplete: outcome=%s artifact_keys=%s", projectionOutcome, artifactKeysType)
+	}
+}
+
 func insertResultFixture(t *testing.T, ctx context.Context, pool *pgxpool.Pool, ownerID, datasetID, versionID, jobID, attemptID, leaseID, workerID uuid.UUID) {
 	t.Helper()
 	if _, err := pool.Exec(ctx, `INSERT INTO users (id, email, password_hash) VALUES ($1, $2, 'integration')`, ownerID, fmt.Sprintf("result-%s@example.com", ownerID)); err != nil {
@@ -188,4 +300,8 @@ func cleanupResultFixture(t *testing.T, ctx context.Context, pool *pgxpool.Pool,
 	if _, err := pool.Exec(ctx, `DELETE FROM users WHERE id = $1`, ownerID); err != nil {
 		t.Errorf("delete result user fixture: %v", err)
 	}
+}
+
+func int64Pointer(value int64) *int64 {
+	return &value
 }

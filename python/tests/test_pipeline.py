@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import io
 from collections.abc import Mapping
+from datetime import UTC, datetime
 from uuid import uuid4
 
 import pytest
@@ -12,6 +13,7 @@ from pipeforge_worker.processors.protocols import (
     CancellationRequested,
     MappingOperationDispatcher,
     ProcessingContext,
+    ProgressReporter,
 )
 from pipeforge_worker.readers.factory import DatasetReaderFactory
 from pipeforge_worker.readers.models import DataChunk, ReaderMetadata, ReaderOptions
@@ -100,3 +102,44 @@ def test_pipeline_rejects_unknown_operation_config() -> None:
             options=ReaderOptions(has_header=True),
             context=_context([]),
         )
+
+
+def test_progress_reporter_is_bounded_and_contains_rate_metadata() -> None:
+    progress: list[object] = []
+    monotonic = [0.0]
+    current = [datetime(2026, 8, 2, 12, 0, tzinfo=UTC)]
+    context = ProcessingContext(
+        job_id=uuid4(),
+        attempt_id=uuid4(),
+        lease_id=uuid4(),
+        worker_id=uuid4(),
+        on_progress=progress.append,
+        monotonic=lambda: monotonic[0],
+        utc_now=lambda: current[0],
+    )
+    reporter = ProgressReporter(context, min_interval_seconds=1.0, min_progress_delta_percent=10.0)
+
+    for rows in range(100):
+        reporter.emit(rows, 10_000)
+    monotonic[0] = 1.0
+    current[0] = current[0].replace(second=1)
+    reporter.emit(100, 10_000)
+    reporter.emit(100, 10_000, final=True)
+
+    assert len(progress) == 3
+    assert progress[-1].final is True
+    assert progress[-1].stage == "PROCESS"
+    assert progress[-1].updated_at == current[0]
+    assert progress[-1].throughput == 100.0
+
+
+def test_progress_reporter_rejects_inconsistent_row_estimate() -> None:
+    reporter = ProgressReporter(_context([]))
+
+    with pytest.raises(ValueError, match="estimated_rows"):
+        reporter.emit(11, 10)
+
+
+def test_progress_reporter_rejects_unbounded_zero_percent_threshold() -> None:
+    with pytest.raises(ValueError, match="progress delta"):
+        ProgressReporter(_context([]), min_progress_delta_percent=0.0)
