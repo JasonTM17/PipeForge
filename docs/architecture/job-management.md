@@ -62,6 +62,6 @@ When a worker result arrives, the result consumer applies the job transition onl
 
 ## Fair selection
 
-The scheduler reads a bounded candidate window with `FOR UPDATE SKIP LOCKED`; it does not assign a worker lease in this phase. Candidates are grouped by owner and selected in round-robin passes. Priority and age order jobs within an owner, while the round-robin boundary prevents one owner with a large backlog from consuming the entire batch. Lease assignment, heartbeat renewal, and timeout recovery belong to the later lease phase.
+The scheduler reads a bounded candidate window with `FOR UPDATE SKIP LOCKED`; candidates are grouped by owner and selected in round-robin passes. Priority and age order jobs within an owner, while the round-robin boundary prevents one owner with a large backlog from consuming the entire batch. The lease repository owns row-locked acquisition, worker-scoped renewal, and expiry recovery; the scheduler process runs the expiry sweep on its configured interval.
 
 The initial per-owner admission bound is 100 queued jobs. Cancellation decrements the queued counter transactionally; retry admission increments it again only if capacity remains.

@@ -1150,6 +1150,76 @@ paths:
                 $ref: '#/components/schemas/Problem'
         '502':
           $ref: '#/components/responses/StorageError'
+  /api/v1/dead-letters:
+    get:
+      operationId: listDeadLetters
+      security:
+        - bearerAuth: []
+        - apiKeyAuth: []
+      parameters:
+        - name: openOnly
+          in: query
+          schema:
+            type: boolean
+            default: true
+        - name: page
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+        - name: pageSize
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+      responses:
+        '200':
+          description: Owner-scoped dead-letter records without raw stack traces.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeadLetterListResponse'
+        '400':
+          $ref: '#/components/responses/InvalidRequest'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+  /api/v1/dead-letters/{recordID}/replay:
+    post:
+      operationId: replayDeadLetter
+      security:
+        - bearerAuth: []
+        - apiKeyAuth: []
+      parameters:
+        - name: recordID
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Dead-letter replay committed with a new attempt and outbox command.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeadLetterReplayResponse'
+        '400':
+          $ref: '#/components/responses/InvalidRequest'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/ResourceConflict'
+        '429':
+          $ref: '#/components/responses/QuotaExceeded'
 components:
   securitySchemes:
     bearerAuth:
@@ -1643,6 +1713,10 @@ components:
           type: string
           format: date-time
           nullable: true
+        nextAttemptAt:
+          type: string
+          format: date-time
+          nullable: true
         startedAt:
           type: string
           format: date-time
@@ -1723,6 +1797,75 @@ components:
         total:
           type: integer
           format: int64
+    DeadLetter:
+      type: object
+      required: [id, jobId, attemptId, attemptNumber, errorCode, errorMessage, retryable, createdAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        jobId:
+          type: string
+          format: uuid
+        attemptId:
+          type: string
+          format: uuid
+        leaseId:
+          type: string
+          format: uuid
+        workerId:
+          type: string
+          format: uuid
+        attemptNumber:
+          type: integer
+          minimum: 1
+        errorCode:
+          type: string
+        errorMessage:
+          type: string
+        retryable:
+          type: boolean
+        diagnosticRef:
+          type: string
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+        replayedAt:
+          type: string
+          format: date-time
+          nullable: true
+        replayedBy:
+          type: string
+          format: uuid
+          nullable: true
+    DeadLetterListResponse:
+      type: object
+      required: [items, page, pageSize, total]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/DeadLetter'
+        page:
+          type: integer
+        pageSize:
+          type: integer
+        total:
+          type: integer
+          format: int64
+    DeadLetterReplayResponse:
+      type: object
+      required: [record, jobId, attemptId]
+      properties:
+        record:
+          $ref: '#/components/schemas/DeadLetter'
+        jobId:
+          type: string
+          format: uuid
+        attemptId:
+          type: string
+          format: uuid
     DatasetListResponse:
       type: object
       required: [items, page, pageSize, total]

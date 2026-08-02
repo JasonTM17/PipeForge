@@ -11,7 +11,8 @@ Each result delivery is processed in one PostgreSQL transaction:
 3. Lock the referenced job and attempt.
 4. Require the current attempt, lease, and (for lifecycle terminal events) worker identity.
 5. Apply the guarded lifecycle transition, progress snapshot, result projection, or staged artifact row.
-6. Mark the inbox outcome and commit before acknowledging RabbitMQ.
+6. For a retryable failure, schedule the next attempt and delayed outbox command in the same transaction; when the budget is exhausted, persist a safe dead-letter record.
+7. Mark the inbox outcome and commit before acknowledging RabbitMQ.
 
 Stale, terminal, or wrong-lease events are recorded as `IGNORED` and do not mutate the newer attempt. Malformed messages are rejected to `control-plane.results.dlq`; processing failures are nacked without requeue so the broker's dead-letter route remains bounded.
 
@@ -30,9 +31,22 @@ The API enforces `artifacts:read` and owner/admin access in the service layer:
 
 Downloads use the object key held in PostgreSQL, never a client-supplied key. Missing objects are returned as a temporary storage error, while internal stack traces and diagnostic details stay server-side.
 
+## Lease recovery, retries, and dead letters
+
+Migration `go/migrations/000010_leases_retries_dlq.sql` adds the retry-ready timestamp, lease timing fields, and safe `job_dead_letters` records. Lease acquisition and renewal are row-locked and worker-scoped. The scheduler sweeper marks an expired attempt `TIMED_OUT`, creates a bounded next attempt, updates quota/history, and writes a delayed `processing.job.requested` outbox message atomically. The retry policy uses the bounded sequence `0s`, `10s`, `30s`, `2m`, and `10m` with at most 20% positive jitter.
+
+Retryable result failures follow the same transaction boundary. Permanent failures skip retry scheduling; retryable failures that exhaust the job budget become `DEAD_LETTERED`. Dead-letter list and replay endpoints are owner-scoped for normal principals and admin-scoped for cross-owner operations:
+
+| Endpoint | Behavior |
+| --- | --- |
+| `GET /api/v1/dead-letters` | Paginated open/all records with safe error metadata only. |
+| `POST /api/v1/dead-letters/{recordID}/replay` | Authenticated, authorized, audited, duplicate-safe replay with a new attempt and outbox command. |
+
+Successful, cancelled, failed, and dead-lettered jobs release their active quota slot. Queue admission remains bounded per owner; replay consumes a fresh queued slot and fails cleanly when capacity is exhausted.
+
 ## Storage and retention boundary
 
-The result migration is `go/migrations/000009_results_inbox_artifacts.sql`. It adds inbox deduplication, result projections, attempt lease/worker identity, latest progress snapshots, and attempt-scoped artifact metadata. Lease expiry, retry scheduling, and dead-letter administration build on these columns in Phase 15.
+The result migration is `go/migrations/000009_results_inbox_artifacts.sql`; lease/recovery state is in `go/migrations/000010_leases_retries_dlq.sql`. Together they provide inbox deduplication, result projections, attempt lease/worker identity, latest progress snapshots, attempt-scoped artifact metadata, bounded retry scheduling, and authorized dead-letter administration.
 
 Run the focused checks from `go/` with the repository's pinned Go toolchain:
 

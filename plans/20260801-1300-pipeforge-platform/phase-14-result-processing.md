@@ -1,7 +1,7 @@
 ---
 phase: 14
 title: Result processing
-status: in-progress
+status: completed
 priority: P1
 effort: 5d
 dependencies:

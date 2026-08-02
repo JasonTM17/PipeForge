@@ -32,6 +32,7 @@ flowchart TB
 - Expiry cleanup claims at most the configured batch limit. Missing objects are aborted and their staged versions are failed; valid final objects are reconciled into the staged version instead of being deleted. Fresh completion attempts receive a configurable grace window, transient storage/database errors remain retryable, and re-running the command is safe.
 - Job creation validates the owner and available dataset version, canonicalizes operation requests for idempotency, and commits job, attempt, history, quota, and `processing.job.requested` outbox state atomically. Cancellation and retry are explicit intent commands; the fair scheduler selects bounded owner-rotated candidates without assigning leases before the lease phase.
 - Internal errors and diagnostic references stay server-side; public problem responses expose stable codes and request IDs.
+- Expired leases are swept with row locks. Retry scheduling updates the attempt, job, quota, history, and delayed outbox command atomically; exhausted retries become inspectable dead-letter records and can be replayed through an owner/admin authorization boundary.
 
 ## Runtime processes
 
