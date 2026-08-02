@@ -4,6 +4,7 @@ Go owns the lease boundary. A worker can only renew the opaque lease assigned to
 
 ```mermaid
 sequenceDiagram
+    participant Owner
     participant Scheduler
     participant PG as PostgreSQL
     participant Worker
@@ -15,9 +16,21 @@ sequenceDiagram
     Scheduler->>MQ: publish command through outbox
     MQ-->>Worker: durable command
     Worker->>PG: renew lease before expiry
+    Worker->>MQ: throttled progress with attempt + lease IDs
+    MQ->>PG: monotonic latest snapshot + capped history
     Worker->>MQ: result with attempt + lease + worker IDs
     MQ->>PG: result inbox + guarded transition
-    alt worker crashes
+    alt owner cancels before lease
+        Owner->>PG: commit QUEUED -> CANCELLED
+        PG->>PG: release queued quota + cancellation result projection
+    else owner cancels active work
+        Owner->>PG: commit RUNNING/LEASED -> CANCEL_REQUESTED
+        PG->>MQ: fenced cancellation command through outbox
+        MQ-->>Worker: cancellation token for exact attempt + lease
+        Worker->>Worker: stop at safe boundary and clean up
+        Worker->>MQ: CANCELLED result after cleanup
+        MQ->>PG: accept only matching CANCEL_REQUESTED transition
+    else worker crashes
         Scheduler->>PG: lock expired lease
         PG->>PG: TIMED_OUT attempt
         PG->>PG: create bounded next attempt and nextAttemptAt
@@ -28,6 +41,12 @@ sequenceDiagram
         PG->>PG: new attempt + audit + outbox command
     end
 ```
+
+Cancellation and success are ordered by the committed PostgreSQL transition: a
+success accepted first makes a later cancel invalid, while a committed
+`CANCEL_REQUESTED` state makes a late success advisory and ignored. If an active
+worker disappears after cancellation was requested, lease expiry finalizes the
+same attempt as `CANCELLED` and releases its active quota slot.
 
 ## Timing trade-offs
 

@@ -505,7 +505,7 @@ paths:
               $ref: '#/components/schemas/CancelJobRequest'
       responses:
         '200':
-          description: Job moved to CANCEL_REQUESTED or returned idempotently.
+          description: Queued jobs are cancelled immediately; leased/running jobs move to CANCEL_REQUESTED and complete after worker acknowledgement.
           content:
             application/json:
               schema:
@@ -518,6 +518,73 @@ paths:
           $ref: '#/components/responses/NotFound'
         '409':
           $ref: '#/components/responses/ResourceConflict'
+  /api/v1/jobs/{jobID}/progress:
+    get:
+      operationId: getJobProgress
+      security:
+        - bearerAuth: []
+        - apiKeyAuth: []
+      parameters:
+        - name: jobID
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Latest validated progress snapshot for the authorized job.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProgressSnapshot'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /api/v1/jobs/{jobID}/progress/history:
+    get:
+      operationId: listJobProgressHistory
+      security:
+        - bearerAuth: []
+        - apiKeyAuth: []
+      parameters:
+        - name: jobID
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: page
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+        - name: pageSize
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+      responses:
+        '200':
+          description: Capped, newest-first progress history for the authorized job.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProgressListResponse'
+        '400':
+          $ref: '#/components/responses/InvalidRequest'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
   /api/v1/jobs/{jobID}/retry:
     parameters:
       - name: jobID
@@ -1744,6 +1811,58 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/Job'
+        page:
+          type: integer
+        pageSize:
+          type: integer
+        total:
+          type: integer
+          format: int64
+    ProgressSnapshot:
+      type: object
+      required: [jobId, attemptId, stage, processedRows, progressPercent, throughput, updatedAt, receivedAt]
+      properties:
+        jobId:
+          type: string
+          format: uuid
+        attemptId:
+          type: string
+          format: uuid
+        stage:
+          type: string
+          pattern: '^[A-Za-z0-9_-]{1,64}$'
+        processedRows:
+          type: integer
+          format: int64
+          minimum: 0
+        estimatedTotalRows:
+          type: integer
+          format: int64
+          minimum: 0
+          nullable: true
+        progressPercent:
+          type: number
+          format: double
+          minimum: 0
+          maximum: 100
+        throughput:
+          type: number
+          format: double
+          minimum: 0
+        updatedAt:
+          type: string
+          format: date-time
+        receivedAt:
+          type: string
+          format: date-time
+    ProgressListResponse:
+      type: object
+      required: [items, page, pageSize, total]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/ProgressSnapshot'
         page:
           type: integer
         pageSize:

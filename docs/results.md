@@ -46,7 +46,9 @@ Successful, cancelled, failed, and dead-lettered jobs release their active quota
 
 ## Storage and retention boundary
 
-The result migration is `go/migrations/000009_results_inbox_artifacts.sql`; lease/recovery state is in `go/migrations/000010_leases_retries_dlq.sql`. Together they provide inbox deduplication, result projections, attempt lease/worker identity, latest progress snapshots, attempt-scoped artifact metadata, bounded retry scheduling, and authorized dead-letter administration.
+The result migration is `go/migrations/000009_results_inbox_artifacts.sql`; lease/recovery state is in `go/migrations/000010_leases_retries_dlq.sql`; bounded progress history is in `go/migrations/000011_progress_cancellation.sql`. Together they provide inbox deduplication, result projections, attempt lease/worker identity, latest progress snapshots, capped newest-first progress history, attempt-scoped artifact metadata, bounded retry scheduling, and authorized dead-letter administration.
+
+Progress is exposed through `GET /api/v1/jobs/{jobID}/progress` and the paginated `/progress/history` route. The latest snapshot is replaced only by a newer event from the current attempt whose timestamp, processed rows, and percentage do not regress the stored state. History is trimmed transactionally to the newest 100 entries per job.
 
 Run the focused checks from `go/` with the repository's pinned Go toolchain:
 

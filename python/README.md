@@ -23,6 +23,8 @@ python/.venv/Scripts/python.exe -m mypy python/src
 ```
 
 Set `PIPEFORGE_WORKER_HEALTH_ONLY=true` to start only the health/metrics
-server. The RabbitMQ command classifier remains intentionally fail-closed until
-lease-bound source resolution and result publication are available; direct
-pipeline composition is covered by the reader/pipeline tests.
+server. The cancellation-aware executor and fencing token registry are covered
+by worker tests, but the default RabbitMQ command classifier remains
+intentionally fail-closed until Phase 20 connects lease-bound source
+resolution, artifact publication, and result events; direct pipeline
+composition is covered by the reader/pipeline tests.

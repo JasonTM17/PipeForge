@@ -12,7 +12,7 @@ stateDiagram-v2
     RUNNING --> SUCCEEDED: result accepted
     RUNNING --> FAILED_RETRYABLE: transient failure
     RUNNING --> FAILED_PERMANENT: permanent failure
-    QUEUED --> CANCEL_REQUESTED: client cancel
+    QUEUED --> CANCELLED: client cancel before lease
     LEASED --> CANCEL_REQUESTED: client cancel
     RUNNING --> CANCEL_REQUESTED: client cancel
     CANCEL_REQUESTED --> CANCELLED: worker acknowledgement
@@ -22,14 +22,14 @@ stateDiagram-v2
     FAILED_RETRYABLE --> DEAD_LETTERED: retry budget exhausted
 ```
 
-There is no arbitrary status-update endpoint. Every transition is checked against the current state, recorded in `job_state_history`, and either committed with its outbox command or rolled back together with it. `SUCCEEDED` and `CANCELLED` are terminal for this phase; failed states can only be re-queued through the retry-intent command and a new attempt row.
+There is no arbitrary status-update endpoint. Every transition is checked against the current state, recorded in `job_state_history`, and either committed with its outbox command or rolled back together with it. A queued job is cancelled immediately because no worker owns it; a leased/running job enters `CANCEL_REQUESTED` and completes only after a matching attempt/lease cancellation result or a bounded lease-expiry fallback. `SUCCEEDED` and `CANCELLED` are terminal for this phase; failed states can only be re-queued through the retry-intent command and a new attempt row.
 
 ## API contract
 
 - `POST /api/v1/datasets/{datasetVersionID}/jobs` creates a queued job (`/v1` is retained as a compatibility alias). `Idempotency-Key` is optional, owner-scoped, and limited to 128 bytes.
 - `GET /api/v1/jobs` returns an owner-filtered page; administrators can see all owners.
 - `GET /api/v1/jobs/{jobID}` returns a safe job projection without object-storage credentials or internal stack traces.
-- `POST /api/v1/jobs/{jobID}/cancel` requests cancellation and publishes `processing.job.cancel-requested` through the outbox.
+- `POST /api/v1/jobs/{jobID}/cancel` cancels queued work immediately or requests active cancellation and publishes `processing.job.cancel-requested` through the outbox. Active commands carry the current attempt and lease identity.
 - `POST /api/v1/jobs/{jobID}/retry` re-queues an eligible failed/dead-lettered job and publishes a fresh request command.
 
 Operation types are allowlisted: `PROFILE_DATASET`, `CHECK_MISSING_VALUES`, `CHECK_DUPLICATES`, `VALIDATE_QUALITY`, and `DETECT_OUTLIERS`. Column identifiers are restricted to safe identifier syntax, operation count is capped at 32, and request bodies are capped at 64 KiB. Fingerprints use canonical JSON, so object-key ordering cannot bypass idempotency conflict detection. Outlier detection supports IQR, Z-score, and modified Z-score with explicit finite-number, null-policy, sample-size, and reference bounds.

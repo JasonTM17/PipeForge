@@ -85,7 +85,7 @@ PipeForge is a from-scratch monorepo for distributed dataset processing. The Go 
 | 13 | [Anomaly detection](./phase-13-anomaly-detection.md) | Completed |
 | 14 | [Result processing](./phase-14-result-processing.md) | Completed |
 | 15 | [Lease and recovery](./phase-15-lease-and-recovery.md) | Completed |
-| 16 | [Progress and cancellation](./phase-16-progress-and-cancellation.md) | Pending |
+| 16 | [Progress and cancellation](./phase-16-progress-and-cancellation.md) | Completed |
 | 17 | [CLI](./phase-17-cli.md) | Pending |
 | 18 | [Security and quotas](./phase-18-security-and-quotas.md) | Pending |
 | 19 | [Observability](./phase-19-observability.md) | Pending |
