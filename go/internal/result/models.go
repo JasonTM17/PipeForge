@@ -25,6 +25,7 @@ var (
 	ErrArtifactNotFound    = errors.New("artifact not found")
 	ErrArtifactUnavailable = errors.New("artifact is unavailable")
 	ErrArtifactTooLarge    = errors.New("artifact exceeds download limit")
+	ErrProgressNotFound    = errors.New("progress snapshot not found")
 )
 
 type Outcome struct {
@@ -62,10 +63,43 @@ type ArtifactListQuery struct {
 	PageSize    int
 }
 
+type ProgressSnapshot struct {
+	OwnerUserID        uuid.UUID `json:"-"`
+	JobID              uuid.UUID `json:"jobId"`
+	AttemptID          uuid.UUID `json:"attemptId"`
+	LeaseID            uuid.UUID `json:"-"`
+	Stage              string    `json:"stage"`
+	ProcessedRows      int64     `json:"processedRows"`
+	EstimatedTotalRows *int64    `json:"estimatedTotalRows,omitempty"`
+	ProgressPercent    float64   `json:"progressPercent"`
+	Throughput         float64   `json:"throughput"`
+	UpdatedAt          time.Time `json:"updatedAt"`
+	ReceivedAt         time.Time `json:"receivedAt"`
+}
+
+type ProgressPage struct {
+	Items    []ProgressSnapshot `json:"items"`
+	Page     int                `json:"page"`
+	PageSize int                `json:"pageSize"`
+	Total    int64              `json:"total"`
+}
+
+type ProgressQuery struct {
+	OwnerUserID *uuid.UUID
+	JobID       uuid.UUID
+	Page        int
+	PageSize    int
+}
+
 type Store interface {
 	Process(context.Context, queue.Envelope) (Outcome, error)
 	ListArtifacts(context.Context, ArtifactListQuery) (ArtifactPage, error)
 	GetArtifact(context.Context, uuid.UUID) (Artifact, error)
+}
+
+type ProgressStore interface {
+	GetProgress(context.Context, ProgressQuery) (ProgressSnapshot, error)
+	ListProgress(context.Context, ProgressQuery) (ProgressPage, error)
 }
 
 type Processor interface {

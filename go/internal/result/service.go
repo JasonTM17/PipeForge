@@ -70,6 +70,46 @@ func (s *Service) GetArtifact(ctx context.Context, principal auth.Principal, art
 	return item, nil
 }
 
+func (s *Service) GetProgress(ctx context.Context, principal auth.Principal, jobID uuid.UUID) (ProgressSnapshot, error) {
+	store, err := s.progressStore()
+	if err != nil {
+		return ProgressSnapshot{}, err
+	}
+	if err := authz.RequireScope(principal, authz.ScopeJobsRead); err != nil {
+		return ProgressSnapshot{}, err
+	}
+	if jobID == uuid.Nil {
+		return ProgressSnapshot{}, fmt.Errorf("%w: job ID is required", ErrInvalidInput)
+	}
+	var ownerID *uuid.UUID
+	if principal.Role != auth.RoleAdmin {
+		ownerID = &principal.UserID
+	}
+	return store.GetProgress(ctx, ProgressQuery{OwnerUserID: ownerID, JobID: jobID})
+}
+
+func (s *Service) ListProgress(ctx context.Context, principal auth.Principal, jobID uuid.UUID, page, pageSize int) (ProgressPage, error) {
+	store, err := s.progressStore()
+	if err != nil {
+		return ProgressPage{}, err
+	}
+	if err := authz.RequireScope(principal, authz.ScopeJobsRead); err != nil {
+		return ProgressPage{}, err
+	}
+	page, pageSize, err = normalizeArtifactPagination(page, pageSize)
+	if err != nil {
+		return ProgressPage{}, err
+	}
+	if jobID == uuid.Nil {
+		return ProgressPage{}, fmt.Errorf("%w: job ID is required", ErrInvalidInput)
+	}
+	var ownerID *uuid.UUID
+	if principal.Role != auth.RoleAdmin {
+		ownerID = &principal.UserID
+	}
+	return store.ListProgress(ctx, ProgressQuery{OwnerUserID: ownerID, JobID: jobID, Page: page, PageSize: pageSize})
+}
+
 func (s *Service) OpenArtifact(ctx context.Context, principal auth.Principal, artifactID uuid.UUID) (Artifact, io.ReadCloser, error) {
 	item, err := s.GetArtifact(ctx, principal, artifactID)
 	if err != nil {
@@ -96,6 +136,17 @@ func (s *Service) requireConfigured() error {
 		return errors.New("result service is not configured")
 	}
 	return nil
+}
+
+func (s *Service) progressStore() (ProgressStore, error) {
+	if err := s.requireConfigured(); err != nil {
+		return nil, err
+	}
+	store, ok := s.Store.(ProgressStore)
+	if !ok {
+		return nil, errors.New("result store does not support progress queries")
+	}
+	return store, nil
 }
 
 func normalizeArtifactPagination(page, pageSize int) (int, int, error) {

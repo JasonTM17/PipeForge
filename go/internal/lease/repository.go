@@ -239,7 +239,7 @@ SELECT j.id, j.state, j.owner_user_id, j.dataset_version_id, j.max_attempts, j.o
        a.id, a.attempt_number, a.state, a.lease_id, a.worker_id
 FROM processing_jobs j
 JOIN job_attempts a ON a.job_id = j.id
-WHERE j.state IN ('LEASED', 'RUNNING')
+WHERE j.state IN ('LEASED', 'RUNNING', 'CANCEL_REQUESTED')
   AND a.state IN ('LEASED', 'RUNNING')
   AND a.lease_expires_at IS NOT NULL
   AND a.lease_expires_at <= $1
@@ -276,6 +276,32 @@ LIMIT $2`, now, limit)
 func (r *Repository) expireOne(ctx context.Context, tx pgx.Tx, item expiredCandidate, now time.Time, report *SweepReport) error {
 	if _, err := tx.Exec(ctx, `UPDATE job_attempts SET state = $2, finished_at = $3, lease_expires_at = $3 WHERE id = $1`, item.AttemptID, job.AttemptTimedOut, now); err != nil {
 		return fmt.Errorf("time out attempt: %w", err)
+	}
+	if item.JobState == job.StateCancelRequested {
+		if _, err := tx.Exec(ctx, `UPDATE job_attempts SET state = $2, finished_at = $3, error_code = NULL, error_message = NULL, retryable = FALSE WHERE id = $1`, item.AttemptID, job.AttemptCancelled, now); err != nil {
+			return fmt.Errorf("mark expired cancellation attempt: %w", err)
+		}
+		if _, err := tx.Exec(ctx, `
+UPDATE processing_jobs
+SET state = $2, next_attempt_at = NULL, completed_at = $3, finished_at = $3, updated_at = $3,
+    last_error_code = NULL, last_error_message = NULL
+WHERE id = $1`, item.JobID, job.StateCancelled, now); err != nil {
+			return fmt.Errorf("finalize expired cancellation: %w", err)
+		}
+		if _, err := tx.Exec(ctx, `UPDATE job_quota_counters SET active_count = GREATEST(active_count - 1, 0), updated_at = $2 WHERE owner_user_id = $1`, item.OwnerUserID, now); err != nil {
+			return fmt.Errorf("update expired cancellation quota: %w", err)
+		}
+		if _, err := tx.Exec(ctx, `
+INSERT INTO job_result_projections (job_id, attempt_id, outcome, artifact_keys, error_code, error_message, retryable)
+VALUES ($1, $2, 'CANCELLED', '[]'::jsonb, 'CANCELLED', 'worker lease expired after cancellation request', FALSE)
+ON CONFLICT (job_id, attempt_id) DO NOTHING`, item.JobID, item.AttemptID); err != nil {
+			return fmt.Errorf("record expired cancellation result: %w", err)
+		}
+		if err := recordHistory(ctx, tx, item.JobID, job.StateCancelRequested, job.StateCancelled, "cancellation_lease_expired"); err != nil {
+			return err
+		}
+		report.Cancelled++
+		return nil
 	}
 	nextAttempt := item.AttemptNumber + 1
 	canRetry := item.AttemptNumber >= 1 && nextAttempt <= item.MaxAttempts

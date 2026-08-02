@@ -2,7 +2,7 @@
 
 PipeForge is a production-oriented distributed data-processing platform for uploading datasets, scheduling analysis jobs, processing data with Python workers, and accepting results through a reliable Go control plane.
 
-> Status: Phases 1–6 are implemented and verified; jobs, workers, and delivery behavior are being added incrementally. Commands marked planned are not presented as working until their phase is implemented and tested.
+> Status: Phases 1–15 are implemented with local verification; Phase 16 adds bounded progress and fenced cooperative cancellation. Live PostgreSQL/RabbitMQ/MinIO end-to-end delivery remains a later delivery gate, so commands marked planned are not presented as working until their phase is implemented and tested.
 
 ## Architecture
 

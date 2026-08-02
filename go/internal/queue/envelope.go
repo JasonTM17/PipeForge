@@ -21,6 +21,7 @@ const (
 	MessageJobProgressed    = "processing.job.progressed"
 	MessageJobSucceeded     = "processing.job.succeeded"
 	MessageJobFailed        = "processing.job.failed"
+	MessageJobCancelled     = "processing.job.cancelled"
 	MessageWorkerHeartbeat  = "processing.worker.heartbeat"
 	MessageWorkerRegistered = "processing.worker.registered"
 	MessageArtifactCreated  = "processing.artifact.created"
@@ -36,6 +37,7 @@ var (
 		MessageJobProgressed:    {"jobId", "attemptId", "leaseId", "stage", "processedRows", "progressPercent", "updatedAt"},
 		MessageJobSucceeded:     {"jobId", "attemptId", "leaseId", "workerId", "artifacts"},
 		MessageJobFailed:        {"jobId", "attemptId", "leaseId", "workerId", "error"},
+		MessageJobCancelled:     {"jobId", "attemptId", "leaseId", "workerId", "reason"},
 		MessageWorkerHeartbeat:  {"workerId", "instanceId", "hostname", "supportedOperations", "softwareVersion", "status", "currentConcurrency", "maxConcurrency", "currentJobIds", "observedAt"},
 		MessageWorkerRegistered: {"workerId", "instanceId", "hostname", "supportedOperations", "softwareVersion", "maxConcurrency", "startedAt"},
 		MessageArtifactCreated:  {"jobId", "attemptId", "leaseId", "artifactId", "kind", "objectKey", "sizeBytes", "contentType", "checksumSha256"},

@@ -73,7 +73,7 @@ func run(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	slog.Info("expired lease sweep completed", "claimed", leaseReport.Claimed, "retried", leaseReport.Retried, "deadLettered", leaseReport.DeadLettered)
+	slog.Info("expired lease sweep completed", "claimed", leaseReport.Claimed, "retried", leaseReport.Retried, "deadLettered", leaseReport.DeadLettered, "cancelled", leaseReport.Cancelled)
 	return nil
 }
 

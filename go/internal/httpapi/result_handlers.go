@@ -38,8 +38,53 @@ func registerResultRoutes(router chi.Router, identityService *identity.Service, 
 			r.Get(prefix+"/artifacts/{artifactID}/download", handlers.download)
 			r.Head(prefix+"/artifacts/{artifactID}/download", handlers.download)
 			r.Get(prefix+"/jobs/{jobID}/artifacts", handlers.list)
+			r.Get(prefix+"/jobs/{jobID}/progress", handlers.progress)
+			r.Get(prefix+"/jobs/{jobID}/progress/history", handlers.progressHistory)
 		}
 	})
+}
+
+func (h resultHandlers) progress(w http.ResponseWriter, r *http.Request) {
+	principal, ok := principalFromRequest(r)
+	if !ok {
+		writeResultError(w, r, authz.ErrUnauthenticated)
+		return
+	}
+	jobID, err := parseResultJobID(r)
+	if err != nil {
+		writeResultError(w, r, err)
+		return
+	}
+	item, err := h.service.GetProgress(r.Context(), principal, jobID)
+	if err != nil {
+		writeResultError(w, r, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, item)
+}
+
+func (h resultHandlers) progressHistory(w http.ResponseWriter, r *http.Request) {
+	principal, ok := principalFromRequest(r)
+	if !ok {
+		writeResultError(w, r, authz.ErrUnauthenticated)
+		return
+	}
+	jobID, err := parseResultJobID(r)
+	if err != nil {
+		writeResultError(w, r, err)
+		return
+	}
+	page, pageSize, err := parseArtifactPagination(r)
+	if err != nil {
+		writeResultError(w, r, err)
+		return
+	}
+	items, err := h.service.ListProgress(r.Context(), principal, jobID, page, pageSize)
+	if err != nil {
+		writeResultError(w, r, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, items)
 }
 
 func (h resultHandlers) list(w http.ResponseWriter, r *http.Request) {
@@ -147,6 +192,14 @@ func parseArtifactID(r *http.Request) (uuid.UUID, error) {
 	return parsed, nil
 }
 
+func parseResultJobID(r *http.Request) (uuid.UUID, error) {
+	parsed, err := uuid.Parse(chi.URLParam(r, "jobID"))
+	if err != nil {
+		return uuid.Nil, fmt.Errorf("%w: jobID must be a UUID", result.ErrInvalidInput)
+	}
+	return parsed, nil
+}
+
 func parseArtifactPagination(r *http.Request) (int, int, error) {
 	page, err := parsePositiveQueryInt(r, "page")
 	if err != nil {
@@ -173,6 +226,8 @@ func writeResultError(w http.ResponseWriter, r *http.Request, err error) {
 		WriteProblem(w, r, http.StatusRequestEntityTooLarge, "ARTIFACT_TOO_LARGE", "The artifact exceeds the download limit.", nil)
 	case errors.Is(err, result.ErrArtifactUnavailable):
 		WriteProblem(w, r, http.StatusBadGateway, "ARTIFACT_UNAVAILABLE", "The artifact is temporarily unavailable.", nil)
+	case errors.Is(err, result.ErrProgressNotFound):
+		WriteProblem(w, r, http.StatusNotFound, "PROGRESS_NOT_FOUND", "No progress snapshot is available for this job.", nil)
 	default:
 		WriteProblem(w, r, http.StatusInternalServerError, "INTERNAL_ERROR", "The server could not complete the artifact request.", nil)
 	}

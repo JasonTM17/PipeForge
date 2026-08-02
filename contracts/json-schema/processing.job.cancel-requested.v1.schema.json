@@ -14,6 +14,7 @@
           "properties": {
             "jobId": { "type": "string", "format": "uuid" },
             "attemptId": { "type": ["string", "null"], "format": "uuid" },
+            "leaseId": { "type": ["string", "null"], "format": "uuid" },
             "reason": { "type": "string", "minLength": 1, "maxLength": 500 }
           }
         }

@@ -39,6 +39,7 @@ class ProcessingPipeline:
         options: ReaderOptions,
         context: ProcessingContext,
     ) -> ProcessingResult:
+        context.check_cancellation()
         parsed_operations = parse_operations(operations)
         aggregators = tuple(
             (operation, self._operation_dispatcher.build(operation))
@@ -52,6 +53,7 @@ class ProcessingPipeline:
         ) as session:
             for _, aggregator in aggregators:
                 aggregator.start(session.metadata)
+            context.check_cancellation()
             reporter = ProgressReporter(context, self._progress_interval_seconds)
             for chunk in session.iter_chunks():
                 context.check_cancellation()

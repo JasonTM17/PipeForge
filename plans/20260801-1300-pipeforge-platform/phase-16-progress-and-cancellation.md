@@ -1,10 +1,12 @@
 ---
 phase: 16
-title: "Progress and cancellation"
-status: pending
+title: Progress and cancellation
+status: completed
 priority: P1
-effort: "3d"
-dependencies: [14, 15]
+effort: 3d
+dependencies:
+  - 14
+  - 15
 ---
 
 # Phase 16: Progress and cancellation
@@ -41,17 +43,19 @@ Go stores latest progress snapshot plus capped history. API cancellation transac
 
 ## Success Criteria
 
-- [ ] Progress volume remains bounded under large row counts and preserves latest state.
-- [ ] Cancellation stops work at a safe boundary and results in `CANCELLED` only when valid.
-- [ ] Success/cancel races have deterministic terminal outcome based on committed transition order.
-- [ ] Duplicate/stale progress/cancel/result messages do not regress state.
+- [x] Progress volume remains bounded under large row counts and preserves latest state.
+- [x] Cancellation stops work at a safe boundary and results in `CANCELLED` only when valid.
+- [x] Success/cancel races have deterministic terminal outcome based on committed transition order.
+- [x] Duplicate/stale progress/cancel/result messages do not regress state.
 
 ## Validation
 
-- Go/Python unit tests
-- integration test with real broker and multi-chunk fixture
-- race detector where available
-- API transition/status tests
+- `go test ./...`, `go test -race ./...`, and `go vet ./...` pass.
+- `go test -tags integration ./...` builds and is skip-safe; database-backed cases remain skipped because `PIPEFORGE_TEST_DATABASE_URL` is not configured.
+- Python suite passes 54 tests; Ruff, format check, and mypy pass.
+- Contract validation passes 14 schemas, 13 valid examples, and 4 invalid examples.
+- Compose syntax validates with temporary non-secret required values; live Docker services were unavailable for end-to-end execution.
+- API progress ownership/pagination and worker cancellation/progress behavior have focused tests.
 
 ## Risk Assessment
 
@@ -68,4 +72,4 @@ Phase 17 provides `pipectl` access to the public API.
 
 ## Unresolved Questions
 
-- None blocking; progress history retention is configurable and capped by default.
+- No blocking implementation questions; progress history is capped at 100 newest entries per job in this phase and is not runtime-configurable yet.

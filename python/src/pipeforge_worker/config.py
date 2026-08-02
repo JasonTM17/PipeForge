@@ -85,6 +85,12 @@ class Settings(BaseSettings):
         default="processing.jobs",
         validation_alias=AliasChoices("PIPEFORGE_WORKER_QUEUE", "WORKER_QUEUE"),
     )
+    cancellation_queue: str = Field(
+        default="processing.cancellations",
+        validation_alias=AliasChoices(
+            "PIPEFORGE_WORKER_CANCELLATION_QUEUE", "WORKER_CANCELLATION_QUEUE"
+        ),
+    )
     dead_letter_exchange: str = Field(
         default="pipeforge.dead-letter",
         validation_alias=AliasChoices("PIPEFORGE_WORKER_DLX", "WORKER_DLX"),
@@ -92,6 +98,13 @@ class Settings(BaseSettings):
     dead_letter_routing_key: str = Field(
         default="processing.jobs.dlq",
         validation_alias=AliasChoices("PIPEFORGE_WORKER_DLX_ROUTING_KEY", "WORKER_DLX_ROUTING_KEY"),
+    )
+    cancellation_dead_letter_routing_key: str = Field(
+        default="processing.cancellations.dlq",
+        validation_alias=AliasChoices(
+            "PIPEFORGE_WORKER_CANCELLATION_DLX_ROUTING_KEY",
+            "WORKER_CANCELLATION_DLX_ROUTING_KEY",
+        ),
     )
     commands_exchange: str = Field(
         default="pipeforge.commands",
@@ -191,8 +204,10 @@ class Settings(BaseSettings):
         "software_version",
         "broker_url",
         "broker_queue",
+        "cancellation_queue",
         "dead_letter_exchange",
         "dead_letter_routing_key",
+        "cancellation_dead_letter_routing_key",
         "commands_exchange",
         "events_exchange",
         "minio_endpoint",
@@ -247,6 +262,7 @@ class RedactedSettings(BaseModel):
     max_concurrency: int
     prefetch_count: int
     broker_queue: str
+    cancellation_queue: str
     health_host: str
     health_port: int
     health_only: bool
@@ -261,6 +277,7 @@ def redacted_settings(settings: Settings) -> RedactedSettings:
         max_concurrency=settings.max_concurrency,
         prefetch_count=settings.prefetch_count,
         broker_queue=settings.broker_queue,
+        cancellation_queue=settings.cancellation_queue,
         health_host=settings.health_host,
         health_port=settings.health_port,
         health_only=settings.health_only,

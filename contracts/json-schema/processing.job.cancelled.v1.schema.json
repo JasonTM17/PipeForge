@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://pipeforge.dev/contracts/processing.job.cancelled.v1.schema.json",
+  "title": "Processing job cancelled v1",
+  "allOf": [
+    { "$ref": "envelope.v1.schema.json" },
+    {
+      "properties": {
+        "messageType": { "const": "processing.job.cancelled" },
+        "payload": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["jobId", "attemptId", "leaseId", "workerId", "reason"],
+          "properties": {
+            "jobId": { "type": "string", "format": "uuid" },
+            "attemptId": { "type": "string", "format": "uuid" },
+            "leaseId": { "type": "string", "format": "uuid" },
+            "workerId": { "type": "string", "format": "uuid" },
+            "reason": { "type": "string", "minLength": 1, "maxLength": 500 }
+          }
+        }
+      }
+    }
+  ]
+}
