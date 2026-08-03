@@ -89,6 +89,7 @@ services:
     build:
       context: .
       dockerfile: infrastructure/docker/go-api.Dockerfile
+      target: api
     environment:
       PIPEFORGE_ENV: ${PIPEFORGE_ENV:-development}
       PIPEFORGE_LOG_LEVEL: ${PIPEFORGE_LOG_LEVEL:-info}
@@ -146,6 +147,7 @@ services:
     build:
       context: .
       dockerfile: python/Dockerfile
+      target: worker
     environment:
       PIPEFORGE_WORKER_ENV: ${PIPEFORGE_ENV:-development}
       PIPEFORGE_WORKER_LOG_LEVEL: ${PIPEFORGE_LOG_LEVEL:-info}
@@ -190,6 +192,7 @@ services:
     build:
       context: .
       dockerfile: python/Dockerfile
+      target: worker
     environment:
       PIPEFORGE_WORKER_ENV: ${PIPEFORGE_ENV:-development}
       PIPEFORGE_WORKER_LOG_LEVEL: ${PIPEFORGE_LOG_LEVEL:-info}
@@ -231,7 +234,7 @@ services:
     build:
       context: .
       dockerfile: infrastructure/docker/go-api.Dockerfile
-    entrypoint: ["/usr/local/bin/pipeforge-scheduler"]
+      target: scheduler
     environment:
       PIPEFORGE_ENV: ${PIPEFORGE_ENV:-development}
       PIPEFORGE_LOG_LEVEL: ${PIPEFORGE_LOG_LEVEL:-info}
@@ -283,7 +286,7 @@ services:
     build:
       context: .
       dockerfile: infrastructure/docker/go-api.Dockerfile
-    entrypoint: ["/usr/local/bin/pipeforge-result-consumer"]
+      target: result-consumer
     environment:
       PIPEFORGE_ENV: ${PIPEFORGE_ENV:-development}
       PIPEFORGE_LOG_LEVEL: ${PIPEFORGE_LOG_LEVEL:-info}
@@ -317,7 +320,7 @@ services:
     build:
       context: .
       dockerfile: infrastructure/docker/go-api.Dockerfile
-    entrypoint: ["/usr/local/bin/pipeforge-migrate"]
+      target: migrate
     environment:
       PIPEFORGE_ENV: ${PIPEFORGE_ENV:-development}
       PIPEFORGE_LOG_LEVEL: ${PIPEFORGE_LOG_LEVEL:-info}
