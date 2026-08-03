@@ -114,7 +114,12 @@ def test_profile_artifact_is_schema_valid_and_attempt_scoped() -> None:
         iter((0.0, 1.0)).__next__,
     )
     schema = json.loads(
-        Path("contracts/json-schema/profile.report.v1.schema.json").read_text(encoding="utf-8")
+        (
+            Path(__file__).resolve().parents[2]
+            / "contracts"
+            / "json-schema"
+            / "profile.report.v1.schema.json"
+        ).read_text(encoding="utf-8")
     )
     jsonschema.validate(report, schema)
 
