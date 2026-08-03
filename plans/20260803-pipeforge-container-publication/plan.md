@@ -1,7 +1,7 @@
 ---
 title: PipeForge container publication
 description: Publish verified multi-architecture runtime images to GHCR and Docker Hub.
-status: in-progress
+status: completed
 priority: P1
 branch: ci/container-publication
 tags:
@@ -38,7 +38,7 @@ images on GHCR and Docker Hub without overstating production readiness.
 | 1 | Registry and image audit | Completed |
 | 2 | Role-specific targets and publication workflow | Completed |
 | 3 | Local validation and adversarial review | Completed |
-| 4 | PR, merge, dual-registry publication, evidence | Pending |
+| 4 | PR, merge, dual-registry publication, evidence | Completed |
 
 ## Constraints
 

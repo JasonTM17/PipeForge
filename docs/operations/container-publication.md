@@ -73,3 +73,6 @@ overwrite immutable evidence.
 Container publication does not resolve the remaining production gaps: cloud
 deployment design, backup/restore drills, SLOs, external penetration testing,
 or owner-selected licensing.
+
+The immutable digests and release verification for the current publication are
+recorded in [the 0.2.2 container evidence](../release/container-0.2.2-evidence.md).
