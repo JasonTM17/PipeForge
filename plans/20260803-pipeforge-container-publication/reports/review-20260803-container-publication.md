@@ -60,6 +60,20 @@ before the corrected release.
 - License remains an explicit owner decision.
 - The release has no `latest` tag; consumers must use a version or digest.
 
+## Final publication evidence
+
+- Source: `b54db569b303477643e6b5048c2c24e56b5e777f`.
+- Release workflow: run `30809299824`, all five publish jobs passed.
+- Registries: all five GHCR packages are public and linked to
+  `JasonTM17/PipeForge`; anonymous digest resolution passed for both GHCR and
+  Docker Hub.
+- Platforms: `linux/amd64` and `linux/arm64` present; additional unknown
+  manifests are the expected SBOM/provenance attestations.
+- GitHub attestation verification: pass for the API package.
+- Digest parity: GHCR and Docker Hub match for all five images.
+- Follow-up: Docker action pins upgraded to official Node 24 action majors to
+  remove the deprecation warning observed in the successful release run.
+
 ## Unresolved questions
 
 None for publication. Production deployment and license selection remain
