@@ -2,7 +2,7 @@
   "name": "pipeforge",
   "version": "0.1.0-local",
   "releaseKind": "verified-learning-repository",
-  "sourceCommit": "01f9e05",
+  "sourceCommit": "fb9e96a",
   "runtime": {
     "go": "1.23",
     "python": ">=3.12,<3.15",
@@ -13,7 +13,8 @@
     "composeE2E": "SUCCEEDED with three canonical artifacts and HTTP 200 download",
     "contracts": "15 schemas, 14 valid examples, 5 invalid examples",
     "pythonTests": 60,
-    "consoleBuild": "passed"
+    "consoleBuild": "passed",
+    "githubActionsRun": "30790719107 (all four jobs passed)"
   },
   "assets": {
     "architecture": "docs/assets/images/system-architecture.svg + .png",
