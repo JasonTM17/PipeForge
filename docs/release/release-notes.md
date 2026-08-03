@@ -1,4 +1,4 @@
-# Release notes — 0.2.2-local
+# Release notes — 0.2.3-local
 
 ## Highlights
 
