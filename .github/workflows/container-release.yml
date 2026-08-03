@@ -1,0 +1,199 @@
+name: Container release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Container version without a leading v
+        required: true
+        default: 0.2.1-local
+        type: string
+  release:
+    types: [published]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: container-release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  prepare:
+    name: Prepare release metadata
+    runs-on: ubuntu-latest
+    outputs:
+      ghcr-namespace: ${{ steps.release.outputs.ghcr_namespace }}
+      source-sha: ${{ steps.release.outputs.source_sha }}
+      version: ${{ steps.release.outputs.version }}
+    steps:
+      - name: Resolve and validate release metadata
+        id: release
+        env:
+          DISPATCH_VERSION: ${{ inputs.version }}
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="${DISPATCH_VERSION:-${RELEASE_TAG#v}}"
+          if [[ ! "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+([.-][0-9A-Za-z.-]+)?$ ]]; then
+            echo "Invalid container version: $version" >&2
+            exit 1
+          fi
+          source_sha="${GITHUB_SHA}"
+          if [[ ! "$source_sha" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "Invalid source SHA: $source_sha" >&2
+            exit 1
+          fi
+          {
+            echo "version=$version"
+            echo "source_sha=$source_sha"
+            echo "ghcr_namespace=${GITHUB_REPOSITORY_OWNER,,}"
+          } >> "$GITHUB_OUTPUT"
+
+  publish:
+    name: Publish ${{ matrix.image }}
+    needs: prepare
+    runs-on: ubuntu-latest
+    permissions:
+      attestations: write
+      contents: read
+      id-token: write
+      packages: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - image: api
+            dockerfile: infrastructure/docker/go-api.Dockerfile
+            target: api
+            entrypoint: /usr/local/bin/pipeforge-api
+          - image: scheduler
+            dockerfile: infrastructure/docker/go-api.Dockerfile
+            target: scheduler
+            entrypoint: /usr/local/bin/pipeforge-scheduler
+          - image: result-consumer
+            dockerfile: infrastructure/docker/go-api.Dockerfile
+            target: result-consumer
+            entrypoint: /usr/local/bin/pipeforge-result-consumer
+          - image: migrate
+            dockerfile: infrastructure/docker/go-api.Dockerfile
+            target: migrate
+            entrypoint: /usr/local/bin/pipeforge-migrate
+          - image: worker
+            dockerfile: python/Dockerfile
+            target: worker
+            entrypoint: python -m pipeforge_worker
+    env:
+      DOCKERHUB_IMAGE: ${{ vars.DOCKERHUB_USERNAME }}/pipeforge-${{ matrix.image }}
+      GHCR_IMAGE: ghcr.io/${{ needs.prepare.outputs.ghcr-namespace }}/pipeforge-${{ matrix.image }}
+    steps:
+      - name: Checkout source revision
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.prepare.outputs.source-sha }}
+          persist-credentials: false
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9
+        with:
+          username: ${{ vars.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@c7c53464625b32c7a7e944ae62b3e17d2b600130
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f
+
+      - name: Generate image metadata
+        id: meta
+        uses: docker/metadata-action@c299e40c65443455700f0fdfc63efafe5b349051
+        with:
+          images: |
+            ${{ env.GHCR_IMAGE }}
+            ${{ env.DOCKERHUB_IMAGE }}
+          tags: |
+            type=raw,value=${{ needs.prepare.outputs.version }}
+            type=raw,value=sha-${{ needs.prepare.outputs.source-sha }}
+          labels: |
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
+            org.opencontainers.image.revision=${{ needs.prepare.outputs.source-sha }}
+            org.opencontainers.image.version=${{ needs.prepare.outputs.version }}
+
+      - name: Build and publish image
+        id: build
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8
+        with:
+          context: .
+          file: ${{ matrix.dockerfile }}
+          target: ${{ matrix.target }}
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha,scope=${{ matrix.image }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.image }}
+          provenance: mode=max
+          sbom: true
+
+      - name: Attest GHCR image provenance
+        uses: actions/attest@508db95dd578ae2727ebd6217d5ba78e4fbda05d
+        with:
+          subject-name: ${{ env.GHCR_IMAGE }}
+          subject-digest: ${{ steps.build.outputs.digest }}
+          push-to-registry: true
+
+      - name: Scan published image
+        uses: aquasecurity/trivy-action@b6643a29fecd7f34b3597bc6acb0a98b03d33ff8
+        with:
+          image-ref: ${{ env.GHCR_IMAGE }}@${{ steps.build.outputs.digest }}
+          format: table
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          exit-code: 1
+
+      - name: Verify runtime metadata
+        env:
+          EXPECTED_ENTRYPOINT: ${{ matrix.entrypoint }}
+          IMAGE_DIGEST: ${{ steps.build.outputs.digest }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker pull --platform linux/amd64 "${GHCR_IMAGE}@${IMAGE_DIGEST}"
+          user="$(docker image inspect --format '{{.Config.User}}' "${GHCR_IMAGE}@${IMAGE_DIGEST}")"
+          entrypoint="$(docker image inspect --format '{{join .Config.Entrypoint " "}}' "${GHCR_IMAGE}@${IMAGE_DIGEST}")"
+          test "$user" = "pipeforge"
+          test "$entrypoint" = "$EXPECTED_ENTRYPOINT"
+
+      - name: Record immutable digest
+        env:
+          IMAGE_DIGEST: ${{ steps.build.outputs.digest }}
+          VERSION: ${{ needs.prepare.outputs.version }}
+        shell: bash
+        run: |
+          mkdir -p container-digests
+          printf '%s\n' \
+            "image=${{ matrix.image }}" \
+            "version=${VERSION}" \
+            "source_sha=${{ needs.prepare.outputs.source-sha }}" \
+            "digest=${IMAGE_DIGEST}" \
+            "ghcr=${GHCR_IMAGE}@${IMAGE_DIGEST}" \
+            "dockerhub=${DOCKERHUB_IMAGE}@${IMAGE_DIGEST}" \
+            > "container-digests/${{ matrix.image }}.txt"
+          cat "container-digests/${{ matrix.image }}.txt" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload digest evidence
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
+        with:
+          name: container-digest-${{ matrix.image }}
+          path: container-digests/${{ matrix.image }}.txt
+          if-no-files-found: error
+          retention-days: 90
