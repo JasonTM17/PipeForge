@@ -44,11 +44,11 @@ Establish a compilable Go module and HTTP service with configuration, structured
 
 ## Success Criteria
 
-- [ ] `go test ./...`, `go vet ./...`, and `gofmt` pass.
-- [ ] API starts with valid environment and fails clearly with invalid required configuration.
-- [ ] Readiness reports dependency failure without crashing the process.
-- [ ] Request IDs are generated or propagated and appear in response/error/log context.
-- [ ] An empty PostgreSQL database accepts migrations idempotently through the documented command.
+- [x] `go test ./...`, `go vet ./...`, and `gofmt` pass.
+- [x] API starts with valid environment and fails clearly with invalid required configuration.
+- [x] Readiness reports dependency failure without crashing the process.
+- [x] Request IDs are generated or propagated and appear in response/error/log context.
+- [x] An empty PostgreSQL database accepts migrations idempotently through the documented command.
 
 ## Validation
 
@@ -74,4 +74,3 @@ Phase 4 adds identity and authorization on this HTTP/database foundation.
 ## Unresolved Questions
 
 - None blocking; exact compatible dependency patch versions are resolved during implementation and recorded in `go.mod`.
-

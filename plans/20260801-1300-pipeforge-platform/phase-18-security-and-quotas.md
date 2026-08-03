@@ -1,7 +1,7 @@
 ---
 phase: 18
 title: "Security and quotas"
-status: pending
+status: completed
 priority: P1
 effort: "4d"
 dependencies: [4, 5, 8, 14, 17]
@@ -42,11 +42,11 @@ Security policy helpers are shared by handlers/services, with PostgreSQL counter
 
 ## Success Criteria
 
-- [ ] Threat model has no unassigned high-risk threat in MVP scope.
-- [ ] Oversized, malicious, traversal, formula, injection, and cross-owner cases are rejected or sanitized.
-- [ ] Quotas/rate limits are enforced consistently and produce observable audit/metrics events.
-- [ ] No sensitive data appears in logs, reports, errors, fixtures, or Docker layers.
-- [ ] Security tests pass without weakening existing behavior.
+- [x] Threat model has no unassigned high-risk threat in MVP scope.
+- [x] Oversized, malicious, traversal, formula, injection, and cross-owner cases are rejected or sanitized.
+- [x] Quotas/rate limits are enforced consistently and produce observable audit/metrics events.
+- [x] No sensitive data appears in logs, reports, errors, fixtures, or Docker layers.
+- [x] Security tests pass without weakening existing behavior.
 
 ## Validation
 
@@ -71,4 +71,3 @@ Phase 19 adds cross-service observability and operational dashboards/runbooks.
 ## Unresolved Questions
 
 - None blocking; production secret-manager integration is documented as deployment guidance, not implemented locally.
-

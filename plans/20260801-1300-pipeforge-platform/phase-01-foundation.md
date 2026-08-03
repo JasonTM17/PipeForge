@@ -41,11 +41,11 @@ The repository uses `go/`, `python/`, `contracts/`, `infrastructure/`, `docs/`, 
 
 ## Success Criteria
 
-- [ ] `git status` is clean after foundation commits and the branch is `main`.
-- [ ] README explains the actual current state, prerequisites, and next commands without claiming unimplemented services.
-- [ ] Architecture documents state that PostgreSQL is authoritative and Python never mutates core job state directly.
-- [ ] Ten ADRs record transport, storage, delivery, lease, dataframe, and monorepo decisions.
-- [ ] No secrets, generated dependency trees, or local data are tracked.
+- [x] `git status` is clean after foundation commits and the branch is `main`.
+- [x] README explains the actual current state, prerequisites, and next commands without claiming unimplemented services.
+- [x] Architecture documents state that PostgreSQL is authoritative and Python never mutates core job state directly.
+- [x] Ten ADRs record transport, storage, delivery, lease, dataframe, and monorepo decisions.
+- [x] No secrets, generated dependency trees, or local data are tracked.
 
 ## Validation
 
@@ -70,4 +70,3 @@ Phase 2 adds runnable PostgreSQL, RabbitMQ, MinIO, and observability infrastruct
 ## Unresolved Questions
 
 - None blocking; the attached specification explicitly authorizes reasonable implementation decisions.
-

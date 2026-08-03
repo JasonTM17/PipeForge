@@ -44,11 +44,11 @@ The auth package owns credential hashing/token claims. Repositories own persiste
 
 ## Success Criteria
 
-- [ ] Registration/login/refresh/logout paths work with problem-style errors.
-- [ ] Refresh-token rotation detects reuse and revokes the affected family.
-- [ ] API-key secret is not persisted or returned after creation.
-- [ ] Unauthenticated, insufficient-scope, and cross-owner requests are denied consistently.
-- [ ] Sensitive values are absent from structured logs and test fixtures.
+- [x] Registration/login/refresh/logout paths work with problem-style errors.
+- [x] Refresh-token rotation detects reuse and revokes the affected family.
+- [x] API-key secret is not persisted or returned after creation.
+- [x] Unauthenticated, insufficient-scope, and cross-owner requests are denied consistently.
+- [x] Sensitive values are absent from structured logs and test fixtures.
 
 ## Validation
 
@@ -73,4 +73,3 @@ Phase 5 adds authorized dataset metadata and streamed object storage upload.
 ## Unresolved Questions
 
 - None blocking; token TTL defaults will be conservative and configurable through validated environment settings.
-

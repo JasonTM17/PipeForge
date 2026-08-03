@@ -46,11 +46,11 @@ Add dataset and immutable dataset-version metadata, safe format/content validati
 
 ## Success Criteria
 
-- [ ] CSV/JSONL/Parquet upload stores raw bytes in MinIO without full-memory buffering.
-- [ ] A replacement produces a new immutable version; old version metadata remains readable.
-- [ ] Invalid content/size/name/checksum is rejected without orphaned authoritative metadata.
-- [ ] Dataset APIs paginate/filter and enforce ownership.
-- [ ] No object key is derived directly from untrusted filename text.
+- [x] CSV/JSONL/Parquet upload stores raw bytes in MinIO without full-memory buffering.
+- [x] A replacement produces a new immutable version; old version metadata remains readable.
+- [x] Invalid content/size/name/checksum is rejected without orphaned authoritative metadata.
+- [x] Dataset APIs paginate/filter and enforce ownership.
+- [x] No object key is derived directly from untrusted filename text.
 
 ## Validation
 
@@ -75,4 +75,3 @@ Phase 6 adds large-file multipart lifecycle and abandoned-session cleanup.
 ## Unresolved Questions
 
 - None blocking; exact magic-byte coverage is documented with any format limitations.
-

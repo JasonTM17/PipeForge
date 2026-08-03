@@ -1,7 +1,7 @@
 ---
 phase: 19
 title: "Observability"
-status: pending
+status: completed
 priority: P1
 effort: "3d"
 dependencies: [2, 7, 9, 14, 15, 18]
@@ -42,11 +42,11 @@ Go and Python expose Prometheus metrics with bounded labels (no user/dataset/raw
 
 ## Success Criteria
 
-- [ ] Metrics scrape successfully from Go and Python services.
-- [ ] A job can be traced by correlation ID across API → outbox → worker → result consumer in logs/events.
-- [ ] Dashboards use documented metric names and bounded labels.
-- [ ] Runbooks cover all required dependency/failure cases and are executable from the local environment.
-- [ ] No sensitive values are emitted in observability output.
+- [x] Metrics scrape successfully from Go and Python services.
+- [x] A job can be traced by correlation ID across API → outbox → worker → result consumer in logs/events.
+- [x] Dashboards use documented metric names and bounded labels.
+- [x] Runbooks cover all required dependency/failure cases and are executable from the local environment.
+- [x] No sensitive values are emitted in observability output.
 
 ## Validation
 
@@ -71,4 +71,3 @@ Phase 20 packages services, CI, e2e journey, documentation sync, and release rea
 ## Unresolved Questions
 
 - None blocking; Jaeger/OpenTelemetry backend stays optional for local development.
-

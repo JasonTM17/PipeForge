@@ -42,11 +42,11 @@ Compose defines dependency services separately from application profiles. Rabbit
 
 ## Success Criteria
 
-- [ ] `docker compose config` succeeds with `.env.example` values.
-- [ ] `docker compose up` starts PostgreSQL, RabbitMQ management, and MinIO healthily; monitoring profile is optional and documented.
-- [ ] RabbitMQ exchanges/queues and MinIO buckets exist after repeated initialization.
-- [ ] No service image runs as root where an application image is introduced.
-- [ ] Credentials are environment-driven and absent from Git history.
+- [x] `docker compose config` succeeds with `.env.example` values.
+- [x] `docker compose up` starts PostgreSQL, RabbitMQ management, and MinIO healthily; monitoring profile is optional and documented.
+- [x] RabbitMQ exchanges/queues and MinIO buckets exist after repeated initialization.
+- [x] No service image runs as root where an application image is introduced.
+- [x] Credentials are environment-driven and absent from Git history.
 
 ## Validation
 
@@ -71,4 +71,3 @@ Phase 3 consumes PostgreSQL and metrics contracts to establish the Go API founda
 ## Unresolved Questions
 
 - None blocking; local image versions can be pinned during implementation after compatibility checks.
-

@@ -1,7 +1,7 @@
 ---
 phase: 17
 title: "CLI"
-status: pending
+status: completed
 priority: P2
 effort: "3d"
 dependencies: [4, 5, 8, 14, 15, 16]
@@ -39,11 +39,11 @@ Build `pipectl` as a typed Go client of the public API for authentication, datas
 
 ## Success Criteria
 
-- [ ] Required commands work against documented API endpoints.
-- [ ] CLI reports API problem responses clearly and exits non-zero on failure.
-- [ ] Upload does not read full input into memory.
-- [ ] Token/secret output is suppressed and local config permissions are checked.
-- [ ] CLI integration tests cover expired auth, conflict, not found, forbidden, and network failure.
+- [x] Required commands work against documented API endpoints.
+- [x] CLI reports API problem responses clearly and exits non-zero on failure.
+- [x] Upload does not read full input into memory.
+- [x] Token/secret output is suppressed and local config permissions are checked.
+- [x] CLI integration tests cover expired auth, conflict, not found, forbidden, and network failure.
 
 ## Validation
 
@@ -68,4 +68,3 @@ Phase 18 hardens uploads, quotas, rate limits, and audit visibility.
 ## Unresolved Questions
 
 - None blocking; platform-specific secure token store can remain a follow-up if local encrypted file permissions are documented.
-

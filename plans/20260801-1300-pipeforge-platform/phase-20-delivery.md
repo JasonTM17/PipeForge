@@ -1,7 +1,7 @@
 ---
 phase: 20
 title: "Delivery"
-status: pending
+status: completed
 priority: P1
 effort: "5d"
 dependencies: [1, 2, 3, 9, 17, 18, 19]
@@ -43,12 +43,12 @@ Separate images for API, scheduler, result consumer, and Python worker use multi
 
 ## Success Criteria
 
-- [ ] Docker Compose starts the whole platform from documented commands.
-- [ ] E2E success journey and required failure journeys pass deterministically or report a documented environment limitation.
-- [ ] GitHub Actions workflows are syntactically valid and do not require real cloud credentials.
-- [ ] README, OpenAPI, contracts, architecture, security, testing, performance, and runbooks match implementation.
-- [ ] Final code review has no critical/high unresolved issue; no critical TODOs/secrets remain.
-- [ ] Release checklist includes commit history, validation evidence, limitations, and rollback notes.
+- [x] Docker Compose starts the whole platform from documented commands.
+- [x] E2E success journey and required failure journeys pass deterministically or report a documented environment limitation.
+- [x] GitHub Actions workflows are syntactically valid and do not require real cloud credentials.
+- [x] README, OpenAPI, contracts, architecture, security, testing, performance, and runbooks match implementation.
+- [x] Final code review has no critical/high unresolved issue; no critical TODOs/secrets remain.
+- [x] Release checklist includes commit history, validation evidence, limitations, and rollback notes.
 
 ## Validation
 
@@ -75,4 +75,3 @@ After this phase, mark the CK plan complete only after all acceptance criteria a
 ## Unresolved Questions
 
 - None blocking; registry publication and production deployment remain intentionally outside this local portfolio delivery unless separately authorized.
-

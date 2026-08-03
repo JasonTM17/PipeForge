@@ -1,7 +1,7 @@
 ---
 phase: 21
 title: Frontend console
-status: pending
+status: completed
 priority: P1
 effort: 4d
 dependencies:
