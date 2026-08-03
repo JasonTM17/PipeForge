@@ -82,7 +82,7 @@ jobs:
         run: go run ./cmd/migrate
       - name: PostgreSQL and RabbitMQ integration tests
         run: >-
-          go test -count=1 -tags=integration
+          go test -count=1 -p=1 -tags=integration
           ./internal/outbox
           ./internal/job
           ./internal/lease
