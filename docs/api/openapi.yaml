@@ -62,6 +62,8 @@ paths:
           $ref: '#/components/responses/InvalidRequest'
         '409':
           $ref: '#/components/responses/EmailAlreadyRegistered'
+        '429':
+          $ref: '#/components/responses/RateLimited'
   /v1/auth/login:
     post:
       operationId: loginUser
@@ -82,6 +84,8 @@ paths:
           $ref: '#/components/responses/InvalidRequest'
         '401':
           $ref: '#/components/responses/Unauthenticated'
+        '429':
+          $ref: '#/components/responses/RateLimited'
   /v1/auth/refresh:
     post:
       operationId: rotateRefreshToken
@@ -100,6 +104,8 @@ paths:
                 $ref: '#/components/schemas/TokenResponse'
         '401':
           $ref: '#/components/responses/Unauthenticated'
+        '429':
+          $ref: '#/components/responses/RateLimited'
   /v1/auth/logout:
     post:
       operationId: logoutUser
@@ -1298,6 +1304,18 @@ components:
       in: header
       name: X-API-Key
   responses:
+    RateLimited:
+      description: Authentication attempts exceeded the process-local client-IP limit.
+      headers:
+        Retry-After:
+          description: Seconds until one request token is expected to be available.
+          schema:
+            type: integer
+            minimum: 1
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
     InvalidRequest:
       description: The request is invalid.
       content:

@@ -69,12 +69,17 @@ type apiKeyResponse struct {
 	RevokedAt  *time.Time `json:"revokedAt,omitempty"`
 }
 
-func registerIdentityRoutes(router chi.Router, service *identity.Service) {
+func registerIdentityRoutes(router chi.Router, service *identity.Service, limiter *AuthRateLimiter) {
 	handlers := identityHandlers{service: service}
 	router.Route("/v1", func(r chi.Router) {
-		r.Post("/auth/register", handlers.register)
-		r.Post("/auth/login", handlers.login)
-		r.Post("/auth/refresh", handlers.refresh)
+		r.Group(func(r chi.Router) {
+			if limiter != nil {
+				r.Use(limiter.Middleware)
+			}
+			r.Post("/auth/register", handlers.register)
+			r.Post("/auth/login", handlers.login)
+			r.Post("/auth/refresh", handlers.refresh)
+		})
 		r.Post("/auth/logout", handlers.logout)
 		r.Group(func(r chi.Router) {
 			r.Use(identityAuthMiddleware(service))

@@ -117,16 +117,26 @@ func run() error {
 	}
 
 	metrics := observability.NewMetrics()
+	authRateLimiter, err := httpapi.NewAuthRateLimiter(httpapi.AuthRateLimitConfig{
+		RequestsPerMinute: cfg.AuthRateLimitPerMinute,
+		Burst:             cfg.AuthRateLimitBurst,
+		MaxClients:        cfg.AuthRateLimitMaxClients,
+		EntryTTL:          cfg.AuthRateLimitEntryTTL,
+	})
+	if err != nil {
+		return err
+	}
 	router := httpapi.NewRouter(httpapi.Dependencies{
-		Logger:    logger,
-		Metrics:   metrics,
-		Identity:  identityService,
-		Dataset:   datasetService,
-		Multipart: multipartService,
-		Job:       jobService,
-		Quality:   qualityService,
-		Result:    resultService,
-		DLQ:       dlqService,
+		Logger:          logger,
+		Metrics:         metrics,
+		Identity:        identityService,
+		Dataset:         datasetService,
+		Multipart:       multipartService,
+		Job:             jobService,
+		Quality:         qualityService,
+		Result:          resultService,
+		DLQ:             dlqService,
+		AuthRateLimiter: authRateLimiter,
 		Readiness: func(ctx context.Context) error {
 			if err := pool.Ping(ctx); err != nil {
 				return err
@@ -137,7 +147,15 @@ func run() error {
 			return artifactObjectStore.Ping(ctx)
 		},
 	})
-	server := &http.Server{Addr: cfg.HTTPAddr, Handler: router}
+	server := &http.Server{
+		Addr:              cfg.HTTPAddr,
+		Handler:           router,
+		ReadHeaderTimeout: cfg.HTTPReadHeaderTimeout,
+		ReadTimeout:       cfg.HTTPReadTimeout,
+		WriteTimeout:      cfg.HTTPWriteTimeout,
+		IdleTimeout:       cfg.HTTPIdleTimeout,
+		MaxHeaderBytes:    cfg.HTTPMaxHeaderBytes,
+	}
 
 	serverErr := make(chan error, 1)
 	go func() {

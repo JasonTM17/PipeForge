@@ -17,6 +17,9 @@ func TestLoadUsesDefaults(t *testing.T) {
 	if cfg.ShutdownTimeout != defaultShutdown {
 		t.Fatalf("unexpected shutdown timeout: %s", cfg.ShutdownTimeout)
 	}
+	if cfg.HTTPReadHeaderTimeout != defaultHTTPReadHeaderTimeout || cfg.HTTPReadTimeout != defaultHTTPReadTimeout || cfg.HTTPWriteTimeout != defaultHTTPWriteTimeout || cfg.HTTPIdleTimeout != defaultHTTPIdleTimeout || cfg.HTTPMaxHeaderBytes != defaultHTTPMaxHeaderBytes || cfg.AuthRateLimitPerMinute != defaultAuthRateLimitPerMinute || cfg.AuthRateLimitBurst != defaultAuthRateLimitBurst || cfg.AuthRateLimitMaxClients != defaultAuthRateLimitMaxClients || cfg.AuthRateLimitEntryTTL != defaultAuthRateLimitEntryTTL {
+		t.Fatalf("unexpected HTTP protection defaults: %+v", cfg)
+	}
 	if cfg.AccessTokenTTL != defaultAccessTokenTTL || cfg.RefreshTokenTTL != defaultRefreshTokenTTL || cfg.JWTSigningKey == "" {
 		t.Fatalf("unexpected identity defaults: %+v", cfg)
 	}
@@ -32,6 +35,15 @@ func TestLoadParsesOverrides(t *testing.T) {
 		"POSTGRES_PORT":                         "55433",
 		"PIPEFORGE_DATABASE_MAX_CONNS":          "4",
 		"PIPEFORGE_SHUTDOWN_TIMEOUT":            "3s",
+		"PIPEFORGE_HTTP_READ_HEADER_TIMEOUT":    "2s",
+		"PIPEFORGE_HTTP_READ_TIMEOUT":           "3m",
+		"PIPEFORGE_HTTP_WRITE_TIMEOUT":          "4m",
+		"PIPEFORGE_HTTP_IDLE_TIMEOUT":           "30s",
+		"PIPEFORGE_HTTP_MAX_HEADER_BYTES":       "65536",
+		"PIPEFORGE_AUTH_RATE_LIMIT_PER_MINUTE":  "120",
+		"PIPEFORGE_AUTH_RATE_LIMIT_BURST":       "20",
+		"PIPEFORGE_AUTH_RATE_LIMIT_MAX_CLIENTS": "500",
+		"PIPEFORGE_AUTH_RATE_LIMIT_ENTRY_TTL":   "5m",
 		"PIPEFORGE_ACCESS_TOKEN_TTL":            "10m",
 		"PIPEFORGE_REFRESH_TOKEN_TTL":           "48h",
 		"JWT_SIGNING_KEY":                       "test-jwt-signing-key-with-32-bytes!!",
@@ -66,8 +78,34 @@ func TestLoadParsesOverrides(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Load returned error: %v", err)
 	}
-	if cfg.DatabasePort != 55433 || cfg.DatabaseMaxConns != 4 || cfg.ShutdownTimeout != 3*time.Second || cfg.AccessTokenTTL != 10*time.Minute || cfg.RefreshTokenTTL != 48*time.Hour || cfg.MinIOEndpoint != "minio:9000" || cfg.MinIOPublicEndpoint != "localhost:59010" || cfg.RabbitMQURL != "amqp://user:pass@rabbitmq:5672/" || !cfg.MinIOSecure || cfg.MinIOPublicSecure || cfg.ArtifactBucket != "custom-artifacts" || cfg.MaxUploadBytes != 1048576 || cfg.MultipartPartSize != 5242880 || cfg.MultipartMaxParts != 1000 || cfg.MultipartMaxBytes != 5242880000 || cfg.MultipartSessionTTL != 12*time.Hour || cfg.MultipartURLTTL != 10*time.Minute || cfg.MultipartCompletionGrace != 45*time.Minute || cfg.MultipartCleanupLimit != 25 || cfg.LeaseDuration != 90*time.Second || cfg.LeaseRenewalWindow != 120*time.Second || cfg.LeaseSweepLimit != 40 || cfg.WorkerHeartbeatTTL != 45*time.Second || cfg.SchedulerDispatchInterval != 3*time.Second || cfg.OutboxDispatchInterval != 4*time.Second || cfg.MaintenanceInterval != 5*time.Minute || cfg.SchedulerBatchSize != 7 || cfg.OutboxBatchSize != 8 {
+	if cfg.DatabasePort != 55433 || cfg.DatabaseMaxConns != 4 || cfg.ShutdownTimeout != 3*time.Second || cfg.HTTPReadHeaderTimeout != 2*time.Second || cfg.HTTPReadTimeout != 3*time.Minute || cfg.HTTPWriteTimeout != 4*time.Minute || cfg.HTTPIdleTimeout != 30*time.Second || cfg.HTTPMaxHeaderBytes != 65536 || cfg.AuthRateLimitPerMinute != 120 || cfg.AuthRateLimitBurst != 20 || cfg.AuthRateLimitMaxClients != 500 || cfg.AuthRateLimitEntryTTL != 5*time.Minute || cfg.AccessTokenTTL != 10*time.Minute || cfg.RefreshTokenTTL != 48*time.Hour || cfg.MinIOEndpoint != "minio:9000" || cfg.MinIOPublicEndpoint != "localhost:59010" || cfg.RabbitMQURL != "amqp://user:pass@rabbitmq:5672/" || !cfg.MinIOSecure || cfg.MinIOPublicSecure || cfg.ArtifactBucket != "custom-artifacts" || cfg.MaxUploadBytes != 1048576 || cfg.MultipartPartSize != 5242880 || cfg.MultipartMaxParts != 1000 || cfg.MultipartMaxBytes != 5242880000 || cfg.MultipartSessionTTL != 12*time.Hour || cfg.MultipartURLTTL != 10*time.Minute || cfg.MultipartCompletionGrace != 45*time.Minute || cfg.MultipartCleanupLimit != 25 || cfg.LeaseDuration != 90*time.Second || cfg.LeaseRenewalWindow != 120*time.Second || cfg.LeaseSweepLimit != 40 || cfg.WorkerHeartbeatTTL != 45*time.Second || cfg.SchedulerDispatchInterval != 3*time.Second || cfg.OutboxDispatchInterval != 4*time.Second || cfg.MaintenanceInterval != 5*time.Minute || cfg.SchedulerBatchSize != 7 || cfg.OutboxBatchSize != 8 {
 		t.Fatalf("unexpected overrides: %+v", cfg)
+	}
+}
+
+func TestLoadRejectsInvalidHTTPProtectionSettings(t *testing.T) {
+	for _, test := range []struct {
+		name  string
+		value string
+	}{
+		{"PIPEFORGE_HTTP_READ_HEADER_TIMEOUT", "0s"},
+		{"PIPEFORGE_HTTP_MAX_HEADER_BYTES", "100"},
+		{"PIPEFORGE_AUTH_RATE_LIMIT_PER_MINUTE", "0"},
+		{"PIPEFORGE_AUTH_RATE_LIMIT_BURST", "10001"},
+		{"PIPEFORGE_AUTH_RATE_LIMIT_MAX_CLIENTS", "0"},
+		{"PIPEFORGE_AUTH_RATE_LIMIT_ENTRY_TTL", "invalid"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			_, err := Load(func(key string) string {
+				if key == test.name {
+					return test.value
+				}
+				return ""
+			})
+			if err == nil || !strings.Contains(err.Error(), test.name) {
+				t.Fatalf("expected %s validation error, got %v", test.name, err)
+			}
+		})
 	}
 }
 
