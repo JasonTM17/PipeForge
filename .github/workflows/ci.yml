@@ -166,15 +166,23 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - name: Configure local test environment
-        run: cp .env.example .env
+        run: |
+          cp .env.example .env
+          echo "PIPEFORGE_API_PORT=0" >> "$GITHUB_ENV"
       - name: Build and start the multi-worker stack
         run: docker compose --profile multi-worker up --build --detach --wait
+      - name: Discover the assigned API port
+        run: |
+          api_endpoint="$(docker compose port api 8080)"
+          api_port="${api_endpoint##*:}"
+          test -n "$api_port"
+          echo "PIPEFORGE_E2E_API_PORT=$api_port" >> "$GITHUB_ENV"
       - name: Verify core upload, processing, artifacts, and download flow
         shell: pwsh
-        run: ./scripts/e2e-compose.ps1 -TimeoutSeconds 120
+        run: ./scripts/e2e-compose.ps1 -BaseUrl "http://localhost:$env:PIPEFORGE_E2E_API_PORT" -TimeoutSeconds 120
       - name: Verify multi-worker routing and targeted cancellation
         shell: pwsh
-        run: ./scripts/e2e-multi-worker.ps1 -TimeoutSeconds 120
+        run: ./scripts/e2e-multi-worker.ps1 -BaseUrl "http://localhost:$env:PIPEFORGE_E2E_API_PORT" -TimeoutSeconds 120
       - name: Capture service logs after failure
         if: failure()
         run: docker compose --profile multi-worker logs --no-color
