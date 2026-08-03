@@ -20,6 +20,13 @@ new moderate-or-higher vulnerable dependencies in pull requests. Dependabot
 opens scheduled dependency updates. Vulnerability alerts, automated security
 updates, secret scanning, and secret push protection are enabled.
 
+The separately triggered `Container release` workflow publishes reviewed source
+to GHCR and Docker Hub. It builds multi-architecture, non-root images, records
+full-source-SHA tags and immutable digests, emits SBOM/provenance attestations,
+rejects fixed HIGH or CRITICAL findings, and verifies runtime metadata after
+pulling the published digest. Registry credentials live only in GitHub Actions
+secrets and variables.
+
 This is a solo-owner repository, so zero approving reviews are required and
 administrators are not subject to the protection rule. That is an explicit
 emergency-maintenance bypass, not an assertion that unreviewed changes are
