@@ -1,8 +1,6 @@
 module github.com/JasonTM17/PipeForge/go
 
-go 1.23.0
-
-toolchain go1.23.12
+go 1.25.0
 
 require (
 	github.com/go-chi/chi/v5 v5.1.0
@@ -12,7 +10,7 @@ require (
 	github.com/minio/minio-go/v7 v7.0.90
 	github.com/prometheus/client_golang v1.20.5
 	github.com/rabbitmq/amqp091-go v1.10.0
-	golang.org/x/crypto v0.36.0
+	golang.org/x/crypto v0.52.0
 )
 
 require (
@@ -33,9 +31,9 @@ require (
 	github.com/prometheus/common v0.55.0 // indirect
 	github.com/prometheus/procfs v0.15.1 // indirect
 	github.com/rs/xid v1.6.0 // indirect
-	golang.org/x/net v0.38.0 // indirect
-	golang.org/x/sync v0.12.0 // indirect
-	golang.org/x/sys v0.31.0 // indirect
-	golang.org/x/text v0.23.0 // indirect
+	golang.org/x/net v0.54.0 // indirect
+	golang.org/x/sync v0.20.0 // indirect
+	golang.org/x/sys v0.45.0 // indirect
+	golang.org/x/text v0.37.0 // indirect
 	google.golang.org/protobuf v1.34.2 // indirect
 )
