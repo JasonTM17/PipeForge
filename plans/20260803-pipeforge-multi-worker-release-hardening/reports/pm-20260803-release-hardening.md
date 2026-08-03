@@ -18,9 +18,16 @@
 - Required checks: 8/8 configured
 - Open actionable review findings: 0
 
+## Package
+
+- Artifact: `release/pipeforge-0.2.0-local.zip`
+- Source archive commit: `764e7b5`
+- Entries: 515
+- SHA-256: `53D2F3460613A7EFD3B7FB1A872C6AA50D4BB739A99C3940C5403DBF44C0E78F`
+- Nested release archives: none
+
 ## Remaining
 
-- Build and attach `pipeforge-0.2.0-local.zip`.
 - Publish immutable `v0.2.0-local` prerelease after the package commit passes CI.
 
 ## Unresolved questions
