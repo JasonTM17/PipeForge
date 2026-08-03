@@ -19,6 +19,10 @@
   consumer will not make it canonical after a job has already succeeded.
 - Progress delivery is bounded and may drop intermediate snapshots while
   retaining the latest useful state.
-- The console is a small learning surface. It has no production session
-  management, role administration, or browser E2E suite yet.
+- The console is a small learning surface. It has request cancellation,
+  expired-session handling, unit coverage, and desktop/mobile browser E2E, but
+  it intentionally has no refresh-token cookie flow, role administration, or
+  full operational control surface.
+- Authentication rate limiting is bounded but process-local. Multi-replica
+  deployment requires a shared limiter and an explicit trusted-proxy policy.
 - License selection is intentionally deferred to the repository owner.

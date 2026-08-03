@@ -29,3 +29,25 @@ with `-p=1` because package fixtures intentionally share one service database.
 
 The release remains a verified local learning release, not production
 certification. See [known limitations](./known-limitations.md).
+
+## Professional hardening verification
+
+The 2026-08-03 hardening branch additionally passed:
+
+- all Go unit tests, race tests, vet and build after HTTP timeout and auth
+  rate-limit controls were added;
+- 10 console unit tests with 97.95% statement/line, 95% function and 88.42%
+  branch coverage;
+- 4 Chromium browser flows across desktop and mobile, including an axe scan
+  with zero violations in the authenticated operator flow;
+- npm production dependency audit with zero vulnerabilities;
+- real Compose upload/process/artifact/download E2E and a two-worker run with
+  four successful jobs, two assigned worker UUIDs, exact targeted bindings,
+  zero legacy consumers and a real cancellation ending in `CANCELLED`;
+- documentation link validation across 37 Markdown files and all contract
+  fixtures;
+- direct GitHub API verification of five public GHCR packages linked to this
+  repository and the successful five-image container release workflow.
+
+The GitHub CI run for the merged hardening revision is recorded in the merge
+request rather than predicted in this pre-merge evidence.

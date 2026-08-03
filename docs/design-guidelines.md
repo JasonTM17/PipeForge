@@ -9,6 +9,8 @@ signals, green for verified success, and orange/red for retry or failure.
 - Render only API responses; never manufacture counts, worker states, or
   artifact rows for an operational view.
 - Keep loading, empty, error, unauthorized, and stale states visible.
+- Abort superseded requests and prevent stale responses from replacing the
+  current job or session state.
 - Use keyboard-visible focus rings and controls with text labels.
 - Keep bearer tokens in browser session storage only for this learning surface;
   never put MinIO credentials or presigned URLs in the bundle.

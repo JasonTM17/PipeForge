@@ -1,4 +1,4 @@
-# Release notes — 0.2.0-local
+# Release notes — 0.2.2-local
 
 ## Highlights
 
@@ -13,8 +13,9 @@
   artifact promotion.
 - Compose starts migration and all runtime services with health-aware ordering.
 - `make e2e` provides a disposable API-to-artifact demonstration.
-- CI covers Go, Python, contracts, Compose configuration, and the frontend
-  build.
+- CI covers Go, Python, contracts, documentation links, Compose configuration,
+  frontend coverage/browser accessibility/build, and full multi-worker Compose
+  E2E behavior.
 - CodeQL, dependency review, Dependabot, secret push protection, and strict
   protected-`main` checks now guard repository changes.
 - Vulnerable Go dependencies were upgraded and Dependabot security alerts were
@@ -23,6 +24,9 @@
   cancellation commands with a local ignored token file.
 - Repository now includes architecture/lifecycle diagrams, an E2E GIF, a
   console, and release evidence.
+- Five public multi-architecture images are available from both GHCR and Docker
+  Hub with immutable digests, SBOMs, provenance, attestations, and runtime
+  metadata checks.
 
 ## Not included
 

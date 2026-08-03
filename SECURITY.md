@@ -14,5 +14,7 @@ For a suspected vulnerability, do not open a public issue containing credentials
 - Keep PostgreSQL, RabbitMQ, and MinIO credentials in environment/secret-manager injection.
 - Run dependency, secret, and container scans before release.
 
-The detailed threat model will be added in Phase 18 under `docs/security/threat-model.md`.
-
+See the implemented-control mapping in
+[`docs/security/threat-model.md`](docs/security/threat-model.md) and the
+deployment checklist in
+[`docs/security/secure-configuration.md`](docs/security/secure-configuration.md).
