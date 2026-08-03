@@ -2,7 +2,7 @@
   "name": "pipeforge",
   "version": "0.1.0-local",
   "releaseKind": "verified-learning-repository",
-  "sourceCommit": "replace-with-release-commit",
+  "sourceCommit": "01f9e05",
   "runtime": {
     "go": "1.23",
     "python": ">=3.12,<3.15",
