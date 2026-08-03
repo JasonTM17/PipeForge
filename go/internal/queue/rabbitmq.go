@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net"
 	"sync"
 	"time"
 
@@ -25,6 +26,7 @@ var (
 type PublisherConfig struct {
 	URL            string
 	ConfirmTimeout time.Duration
+	DialTimeout    time.Duration
 	MaxMessageSize int
 }
 
@@ -34,6 +36,9 @@ func (c PublisherConfig) validate() error {
 	}
 	if c.ConfirmTimeout <= 0 {
 		return errors.New("RabbitMQ confirm timeout must be positive")
+	}
+	if c.DialTimeout <= 0 {
+		return errors.New("RabbitMQ dial timeout must be positive")
 	}
 	if c.MaxMessageSize < 1 || c.MaxMessageSize > MaxEnvelopeBytes {
 		return fmt.Errorf("RabbitMQ max message size must be between 1 and %d", MaxEnvelopeBytes)
@@ -54,6 +59,9 @@ func NewPublisher(config PublisherConfig) (*Publisher, error) {
 	if config.ConfirmTimeout == 0 {
 		config.ConfirmTimeout = DefaultConfirmTimeout
 	}
+	if config.DialTimeout == 0 {
+		config.DialTimeout = config.ConfirmTimeout
+	}
 	if config.MaxMessageSize == 0 {
 		config.MaxMessageSize = MaxEnvelopeBytes
 	}
@@ -73,7 +81,7 @@ func (p *Publisher) connectLocked() error {
 	if p.closed {
 		return ErrPublisherClosed
 	}
-	connection, err := amqp091.Dial(p.config.URL)
+	connection, err := Dial(p.config.URL, p.config.DialTimeout)
 	if err != nil {
 		return fmt.Errorf("dial RabbitMQ: %w", err)
 	}
@@ -91,6 +99,37 @@ func (p *Publisher) connectLocked() error {
 	p.channel = channel
 	p.confirmations = channel.NotifyPublish(make(chan amqp091.Confirmation, 1))
 	return nil
+}
+
+// Dial establishes a RabbitMQ connection with a bounded TCP and AMQP handshake.
+// The returned connection has its temporary handshake deadline cleared.
+func Dial(url string, timeout time.Duration) (*amqp091.Connection, error) {
+	if timeout <= 0 {
+		return nil, errors.New("RabbitMQ dial timeout must be positive")
+	}
+	dialer := net.Dialer{Timeout: timeout}
+	var transport net.Conn
+	connection, err := amqp091.DialConfig(url, amqp091.Config{
+		Dial: func(network, address string) (net.Conn, error) {
+			conn, dialErr := dialer.Dial(network, address)
+			if dialErr != nil {
+				return nil, dialErr
+			}
+			if deadlineErr := conn.SetDeadline(time.Now().Add(timeout)); deadlineErr != nil {
+				_ = conn.Close()
+				return nil, deadlineErr
+			}
+			transport = conn
+			return conn, nil
+		},
+	})
+	if transport != nil {
+		_ = transport.SetDeadline(time.Time{})
+	}
+	if err != nil {
+		return nil, fmt.Errorf("dial RabbitMQ: %w", err)
+	}
+	return connection, nil
 }
 
 func (p *Publisher) resetLocked() {

@@ -1,0 +1,14 @@
+stateDiagram-v2
+    [*] --> QUEUED: create job
+    QUEUED --> LEASED: scheduler acquires lease
+    LEASED --> RUNNING: worker starts fenced attempt
+    RUNNING --> RUNNING: progress / heartbeat
+    RUNNING --> SUCCEEDED: artifacts + result
+    RUNNING --> FAILED_RETRYABLE: transient failure
+    FAILED_RETRYABLE --> QUEUED: backoff retry
+    RUNNING --> FAILED_PERMANENT: invalid input
+    RUNNING --> CANCEL_REQUESTED: user cancellation
+    CANCEL_REQUESTED --> CANCELLED: worker acknowledges
+    SUCCEEDED --> [*]
+    FAILED_PERMANENT --> [*]
+    CANCELLED --> [*]

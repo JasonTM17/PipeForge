@@ -6,14 +6,17 @@ RabbitMQ is used for durable at-least-once commands and events. The canonical de
 flowchart LR
     Commands["pipeforge.commands\ntopic exchange"] --> Jobs["processing.jobs\nmanual ack"]
     Commands --> Cancels["processing.cancellations\nmanual ack"]
-    Events["pipeforge.events\ntopic exchange"] --> Results["control-plane.results\nprocessing.job.# + processing.artifact.created\nmanual ack"]
+    Commands --> Dispatch["control-plane.dispatch\nprocessing.job.queued\nmanual ack"]
+    Events["pipeforge.events\ntopic exchange"] --> Results["control-plane.results\nstarted/progressed/succeeded/failed/cancelled + artifact.created\nmanual ack"]
     Events --> Audit["audit.events"]
     Events --> Monitoring["monitoring.events"]
     Jobs -->|bounded reject| DLQ["pipeforge.dead-letter\ntopic exchange"]
     Cancels -->|bounded reject| DLQ
+    Dispatch -->|bounded reject| DLQ
     Results -->|bounded reject| DLQ
     DLQ --> JobsDLQ["processing.jobs.dlq"]
     DLQ --> CancelsDLQ["processing.cancellations.dlq"]
+    DLQ --> DispatchDLQ["control-plane.dispatch.dlq"]
     DLQ --> ResultsDLQ["control-plane.results.dlq"]
 ```
 
@@ -25,5 +28,6 @@ flowchart LR
 - A failed delivery is not requeued indefinitely. The outbox publisher schedules bounded retries with increasing delay and marks poison messages failed after the attempt budget is exhausted.
 - Trace, correlation, causation, message ID, and schema version are copied into AMQP properties/headers.
 - Queue payloads contain no credentials or raw dataset records.
+- `processing.job.queued` is routed only to `control-plane.dispatch`; it is a job-only scheduler signal, not a worker command.
 
 The initial local topology uses the development credentials from `.env`; production deployments must provide separate least-privilege credentials and TLS-ready broker URLs.

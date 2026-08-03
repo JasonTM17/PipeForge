@@ -8,16 +8,51 @@ import (
 
 func TestDefaultTopologyMatchesContract(t *testing.T) {
 	topology := DefaultTopology()
-	if len(topology.Exchanges) != 3 || len(topology.Queues) != 8 || len(topology.Bindings) != 9 {
+	if len(topology.Exchanges) != 3 || len(topology.Queues) != 10 || len(topology.Bindings) != 15 {
 		t.Fatalf("unexpected topology counts: %+v", topology)
 	}
 	if topology.Queues[0].DeadLetter != "processing.jobs.dlq" {
 		t.Fatalf("job queue does not have bounded dead-letter routing: %+v", topology.Queues[0])
 	}
+	if !containsQueue(topology, "control-plane.dispatch", "control-plane.dispatch.dlq") {
+		t.Fatalf("dispatch queue does not have bounded dead-letter routing: %+v", topology.Queues)
+	}
+	if !containsBinding(topology, CommandsExchange, "control-plane.dispatch", MessageJobQueued) {
+		t.Fatalf("queued signal is not bound to the dispatch queue: %+v", topology.Bindings)
+	}
+	for _, messageType := range []string{MessageJobStarted, MessageJobProgressed, MessageJobSucceeded, MessageJobFailed, MessageJobCancelled, MessageArtifactCreated} {
+		if !containsBinding(topology, EventsExchange, "control-plane.results", messageType) {
+			t.Fatalf("result event %s is not bound to the result queue: %+v", messageType, topology.Bindings)
+		}
+	}
+	if containsBinding(topology, EventsExchange, "control-plane.results", "processing.job.#") || containsBinding(topology, EventsExchange, "control-plane.results", "processing.#") {
+		t.Fatalf("result queue must not consume non-result processing events: %+v", topology.Bindings)
+	}
+	if !containsBinding(topology, DeadLetterExchange, "control-plane.dispatch.dlq", "control-plane.dispatch.dlq") {
+		t.Fatalf("dispatch DLQ is not bound to the dead-letter exchange: %+v", topology.Bindings)
+	}
+}
+
+func containsQueue(topology Topology, name, deadLetter string) bool {
+	for _, queue := range topology.Queues {
+		if queue.Name == name && queue.DeadLetter == deadLetter {
+			return true
+		}
+	}
+	return false
+}
+
+func containsBinding(topology Topology, exchange, queue, key string) bool {
+	for _, binding := range topology.Bindings {
+		if binding.Exchange == exchange && binding.Queue == queue && binding.Key == key {
+			return true
+		}
+	}
+	return false
 }
 
 func TestPublisherConfigDefaultsAndValidation(t *testing.T) {
-	if err := (PublisherConfig{URL: "amqp://guest:guest@localhost:5672/", ConfirmTimeout: time.Second, MaxMessageSize: MaxEnvelopeBytes}).validate(); err != nil {
+	if err := (PublisherConfig{URL: "amqp://guest:guest@localhost:5672/", ConfirmTimeout: time.Second, DialTimeout: time.Second, MaxMessageSize: MaxEnvelopeBytes}).validate(); err != nil {
 		t.Fatalf("valid publisher config rejected: %v", err)
 	}
 	if err := (PublisherConfig{ConfirmTimeout: time.Second, MaxMessageSize: MaxEnvelopeBytes}).validate(); err == nil {

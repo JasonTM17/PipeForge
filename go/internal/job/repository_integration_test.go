@@ -4,12 +4,14 @@ package job
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
 	"testing"
 
 	"github.com/JasonTM17/PipeForge/go/internal/outbox"
+	"github.com/JasonTM17/PipeForge/go/internal/queue"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -78,6 +80,28 @@ func TestRepositoryCreatesAtomicIdempotentJobAndOutbox(t *testing.T) {
 	}
 	if jobs != 1 || attempts != 1 || histories != 1 || idempotency != 1 || outboxRows != 1 {
 		t.Fatalf("atomic job records incomplete: jobs=%d attempts=%d histories=%d idempotency=%d outbox=%d", jobs, attempts, histories, idempotency, outboxRows)
+	}
+	var messageType, exchange, routingKey string
+	var payload []byte
+	if err := pool.QueryRow(ctx, `
+SELECT message_type, exchange, routing_key, payload
+FROM outbox_messages
+WHERE payload->>'jobId' = $1`, created.ID.String()).Scan(&messageType, &exchange, &routingKey, &payload); err != nil {
+		t.Fatal(err)
+	}
+	if messageType != queue.MessageJobQueued || exchange != queue.CommandsExchange || routingKey != queue.MessageJobQueued {
+		t.Fatalf("job creation emitted the wrong outbox route: type=%q exchange=%q routingKey=%q", messageType, exchange, routingKey)
+	}
+	var queuedPayload map[string]json.RawMessage
+	if err := json.Unmarshal(payload, &queuedPayload); err != nil {
+		t.Fatalf("decode queued outbox payload: %v", err)
+	}
+	if len(queuedPayload) != 1 {
+		t.Fatalf("job creation emitted executable payload instead of job-only queued signal: %s", payload)
+	}
+	var queuedJobID string
+	if err := json.Unmarshal(queuedPayload["jobId"], &queuedJobID); err != nil || queuedJobID != created.ID.String() {
+		t.Fatalf("job creation emitted the wrong queued job ID: payload=%s err=%v", payload, err)
 	}
 
 	queued, err := repository.SelectQueued(ctx, QueueQuery{Limit: 10})

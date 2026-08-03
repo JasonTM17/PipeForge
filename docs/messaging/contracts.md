@@ -1,6 +1,6 @@
 # Messaging contracts
 
-PipeForge messages use JSON envelopes defined under [`contracts/json-schema`](../../contracts/json-schema/). Every message carries a UUID, stable type, schema version, event time, and trace/correlation/causation identifiers. Payloads contain references and bounded metadata; raw dataset rows and credentials never cross the broker.
+PipeForge messages use JSON envelopes defined under [`contracts/json-schema`](../../contracts/json-schema/). Every message carries a UUID, stable type, schema version, event time, and trace/correlation/causation identifiers. Payloads contain references and bounded metadata; sensitive filenames, raw dataset rows, and credentials never cross RabbitMQ.
 
 ## Validation
 
@@ -15,13 +15,18 @@ Go publishers reject unknown message types, missing envelope fields, invalid pay
 
 The control-plane cancellation representation may omit attempt/lease identity when cancellation is resolved before a lease is assigned; that path is finalized in PostgreSQL and is not sent to a worker. Every command delivered to the worker cancellation queue carries both opaque `attemptId` and `leaseId`; the worker rejects unfenced commands and records accepted requests only for that exact identity, so a delayed cancellation cannot stop a later retry. Progress events carry the same identity and are accepted only when their timestamp and row/percentage values do not regress the current snapshot.
 
+Job creation publishes a durable `processing.job.queued` signal with only `jobId`; it is consumed by the control-plane dispatcher and is never delivered to a worker. The dispatcher alone emits `processing.job.requested` after atomically acquiring a valid lease. That executable command is lease-fenced and requires `attemptId`, `leaseId`, `workerId`, `attemptNumber`, operations, and server-resolved immutable source metadata (`objectKey`, `contentType`, `format`, and `sizeBytes`). It does not carry `originalFilename`, storage credentials, or raw dataset data.
+
+The result queue receives only job lifecycle outcomes (`started`, `progressed`, `succeeded`, `failed`, and `cancelled`) plus `processing.artifact.created`. Worker registration and heartbeat events are not result events and must never be dead-lettered by the result consumer.
+
 The `processing.job.requested` payload accepts the operation types implemented by the control plane: `PROFILE_DATASET`, `CHECK_MISSING_VALUES`, `CHECK_DUPLICATES`, `VALIDATE_QUALITY`, and `DETECT_OUTLIERS`. Column identifiers are bounded SQL-style names (`[A-Za-z_][A-Za-z0-9_]{0,127}`); missing-value and duplicate checks require at least one column, while outlier detection supports `IQR`, `Z_SCORE`, and `MODIFIED_Z_SCORE` with bounded threshold, null-policy, minimum-sample, and reference-limit options. Profile configuration is optional but bounded: deterministic reservoir sampling, quantiles, exact/approximate distinct strategy, common-value limits, memory budget, and sensitive-column suppression are validated before dispatch. Quality snapshots contain 1–256 strict rule definitions; `CUSTOM_EXPRESSION` is rejected at both the Go and Python boundaries. Unknown configuration keys are rejected by the shared schema.
 
 ## Message catalogue
 
 | Type | Direction | Exchange/routing key | Purpose |
 | --- | --- | --- | --- |
-| `processing.job.requested` | Go → worker | `pipeforge.commands` / same key | Start an idempotent job attempt. |
+| `processing.job.queued` | Go → control-plane dispatcher | `pipeforge.commands` / same key | Durable, non-executable scheduler signal carrying only `jobId`. |
+| `processing.job.requested` | Go → worker | `pipeforge.commands` / same key | Start a lease-fenced, idempotent job attempt. |
 | `processing.job.cancel-requested` | Go → worker | `pipeforge.commands` / same key | Ask a worker to stop between bounded stages. |
 | `processing.job.started` | worker → Go | `pipeforge.events` / same key | Report the validated attempt and lease. |
 | `processing.job.progressed` | worker → Go | `pipeforge.events` / same key | Publish throttled progress snapshots. |

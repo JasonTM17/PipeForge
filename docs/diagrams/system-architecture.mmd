@@ -1,0 +1,13 @@
+flowchart LR
+    client["User / Console / pipectl"] -->|HTTP JSON + upload| api["Go API"]
+    api -->|authoritative metadata| postgres[("PostgreSQL")]
+    api -->|immutable upload| source[("MinIO datasets")]
+    api -->|queued event| events[("RabbitMQ events")]
+    scheduler["Go scheduler"] -->|lease + fenced command| postgres
+    scheduler -->|processing.job.requested| commands[("RabbitMQ commands")]
+    worker["Python worker"] -->|consume command| commands
+    worker -->|read source| source
+    worker -->|artifact.created + lifecycle| events
+    result["Go result consumer"] -->|consume outcomes| events
+    result -->|inbox + state + artifact metadata| postgres
+    result -->|canonical report| artifacts[("MinIO artifacts")]

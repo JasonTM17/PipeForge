@@ -2,7 +2,7 @@
 
 PipeForge is a production-oriented distributed data-processing platform for uploading datasets, scheduling analysis jobs, processing data with Python workers, and accepting results through a reliable Go control plane.
 
-> Status: Phases 1–15 are implemented with local verification; Phase 16 adds bounded progress and fenced cooperative cancellation. Live PostgreSQL/RabbitMQ/MinIO end-to-end delivery remains a later delivery gate, so commands marked planned are not presented as working until their phase is implemented and tested.
+> Status: The local runtime path is verified end to end: upload → queued job → lease-bound dispatch → Python processing → canonical artifacts → authorized download. This is a serious learning repository with production-oriented boundaries, not a production deployment. Cloud HA, multi-worker scheduling, and a selected license remain intentionally out of scope.
 
 ## Architecture
 
@@ -20,18 +20,19 @@ Identity endpoints and credential handling are documented in [the API contract](
 ## Repository layout
 
 ```text
-go/             Go API, scheduler, result consumer, CLI, migrations
+go/             Go API, scheduler, result consumer, pipectl CLI, migrations
 python/         Typed Python worker and processing modules
 contracts/      Versioned JSON Schema envelopes, examples, changelog
 infrastructure/ Docker, RabbitMQ, MinIO, Prometheus, Grafana
 docs/           Architecture, ADRs, security, testing, and runbooks
 scripts/        Cross-platform development and validation helpers
+frontend/       Small API-backed operator console (no storage credentials)
 plans/          Persistent implementation plan and phase reports
 ```
 
 ## Local prerequisites
 
-The completed local environment will require:
+The local environment requires:
 
 - Docker Engine with Compose v2
 - Go 1.23 (the module and build image are pinned to the Go 1.23 toolchain line)
@@ -42,7 +43,7 @@ No cloud account or production credential is required for local development. `.e
 
 ## Current local environment
 
-The dependency stack and Go API foundation are runnable. Start PostgreSQL, RabbitMQ, MinIO, and the initialization jobs with:
+Start PostgreSQL, RabbitMQ, MinIO, the Go control plane, scheduler, result consumer, and Python worker with:
 
 ```text
 copy .env.example .env
@@ -57,12 +58,19 @@ docker compose --profile monitoring up -d prometheus grafana
 
 Default host ports are isolated from common local stacks: API `58080`, PostgreSQL `55433`, RabbitMQ `55672`/management `55673`, MinIO `59010`/console `59011`, Prometheus `59090`, and Grafana `53010`. Change them in `.env` if needed.
 
-Apply the foundation migration after bootstrapping dependencies, then start the API with the Compose stack:
+Compose runs the idempotent migration before runtime services. Start the stack with:
 
 ```text
-make migrate
 make dev
 ```
+
+Run the disposable real-service smoke test from another terminal:
+
+```powershell
+make e2e
+```
+
+It creates a throwaway account and dataset, uploads a CSV, runs profile/missing-value/outlier operations, waits for `SUCCEEDED`, verifies three canonical artifacts, and downloads one artifact. It prints IDs and status only; it does not print tokens, presigned URLs, or dataset rows.
 
 The verified identity endpoints are available under `/v1`: registration, login, refresh, logout, and owner-scoped API-key management. Dataset registration, owner-scoped listing/detail/deletion, streamed CSV/JSONL/Parquet version uploads, and presigned multipart sessions are also available. Multipart clients initiate a session, upload each server-scoped part URL, register its ETag/size, then complete with an ordered part list; Go verifies the assembled object before promoting the immutable version. Expired sessions are cleaned in bounded batches with `make cleanup`; in-flight completion receives the configured `PIPEFORGE_MULTIPART_COMPLETION_GRACE` window, and transient object-store errors remain retryable. The API returns a refresh token only at authentication/rotation time; API-key plaintext and MinIO credentials are never returned.
 
@@ -72,6 +80,30 @@ You can inspect the plan and validate the worktree at any time:
 git status --short
 Get-Content plans/20260801-1300-pipeforge-platform/plan.md
 ```
+
+The repository CI mirrors the local quality gates: Go format/test/race/vet, Python lint/format/type/test, contract validation, Compose configuration, and whitespace checks. The complete validation evidence and known limits are recorded in [the release package](docs/release/README.md).
+
+![PipeForge system architecture](docs/assets/images/system-architecture.png)
+
+![PipeForge job lifecycle](docs/assets/images/job-lifecycle.png)
+
+The real local demonstration is captured as a compact [E2E flow GIF](docs/assets/videos/local-e2e-flow.gif).
+
+## Operator console
+
+The optional console is a thin, API-backed learning surface. It stores an access token only in browser session storage, never receives MinIO credentials, and renders live owner-scoped datasets, jobs, progress, and artifacts. Run it with `npm install && npm run dev` from `frontend/`, then point it at the local API when prompted.
+
+The companion `pipectl` exercises the same public API without touching
+PostgreSQL, RabbitMQ, or MinIO directly:
+
+```powershell
+go run ./go/cmd/pipectl login --email you@example.test --password "your-local-password"
+go run ./go/cmd/pipectl datasets
+go run ./go/cmd/pipectl jobs
+```
+
+The token is stored in the ignored `.pipeforge-token` file, or supplied through
+`PIPEFORGE_TOKEN`/`PIPEFORGE_TOKEN_FILE`.
 
 ## Engineering rules
 

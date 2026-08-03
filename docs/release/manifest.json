@@ -1,0 +1,26 @@
+{
+  "name": "pipeforge",
+  "version": "0.1.0-local",
+  "releaseKind": "verified-learning-repository",
+  "sourceCommit": "replace-with-release-commit",
+  "runtime": {
+    "go": "1.23",
+    "python": ">=3.12,<3.15",
+    "node": "22+ for the console",
+    "services": ["postgresql", "rabbitmq", "minio", "go-api", "go-scheduler", "go-result-consumer", "python-worker"]
+  },
+  "validation": {
+    "composeE2E": "SUCCEEDED with three canonical artifacts and HTTP 200 download",
+    "contracts": "15 schemas, 14 valid examples, 5 invalid examples",
+    "pythonTests": 60,
+    "consoleBuild": "passed"
+  },
+  "assets": {
+    "architecture": "docs/assets/images/system-architecture.svg + .png",
+    "jobLifecycle": "docs/assets/images/job-lifecycle.svg + .png",
+    "e2eFlow": "docs/assets/videos/local-e2e-flow.gif",
+    "provenance": "Generated from the real local make e2e run; no credentials or source rows included."
+  },
+  "license": "owner-decision-pending",
+  "productionStatus": "not-production-certified"
+}

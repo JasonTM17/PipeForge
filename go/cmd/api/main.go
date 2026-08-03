@@ -51,7 +51,7 @@ func run() error {
 	if err != nil {
 		return err
 	}
-	objectStore, err := storage.NewMinIO(storage.MinIOConfig{
+	datasetObjectStore, err := storage.NewMinIO(storage.MinIOConfig{
 		Endpoint: cfg.MinIOEndpoint, PublicEndpoint: cfg.MinIOPublicEndpoint,
 		AccessKey: cfg.MinIOAccessKey, SecretKey: cfg.MinIOSecretKey,
 		Secure: cfg.MinIOSecure, PublicSecure: cfg.MinIOPublicSecure, Bucket: cfg.DatasetBucket,
@@ -59,12 +59,20 @@ func run() error {
 	if err != nil {
 		return err
 	}
-	datasetRepository := dataset.NewRepository(pool)
-	datasetService, err := dataset.NewService(datasetRepository, objectStore, cfg.MaxUploadBytes)
+	artifactObjectStore, err := storage.NewMinIO(storage.MinIOConfig{
+		Endpoint: cfg.MinIOEndpoint, PublicEndpoint: cfg.MinIOPublicEndpoint,
+		AccessKey: cfg.MinIOAccessKey, SecretKey: cfg.MinIOSecretKey,
+		Secure: cfg.MinIOSecure, PublicSecure: cfg.MinIOPublicSecure, Bucket: cfg.ArtifactBucket,
+	})
 	if err != nil {
 		return err
 	}
-	multipartService, err := multipart.NewService(datasetRepository, multipart.NewRepository(pool), objectStore, multipart.Config{
+	datasetRepository := dataset.NewRepository(pool)
+	datasetService, err := dataset.NewService(datasetRepository, datasetObjectStore, cfg.MaxUploadBytes)
+	if err != nil {
+		return err
+	}
+	multipartService, err := multipart.NewService(datasetRepository, multipart.NewRepository(pool), datasetObjectStore, multipart.Config{
 		PartSize: cfg.MultipartPartSize, MaxParts: cfg.MultipartMaxParts, MaxBytes: cfg.MultipartMaxBytes,
 		SessionTTL: cfg.MultipartSessionTTL, PartURLTTL: cfg.MultipartURLTTL, CompletionGrace: cfg.MultipartCompletionGrace,
 	})
@@ -95,7 +103,7 @@ func run() error {
 	if err != nil {
 		return err
 	}
-	resultService, err := result.NewService(resultRepository, objectStore)
+	resultService, err := result.NewService(resultRepository, artifactObjectStore)
 	if err != nil {
 		return err
 	}
@@ -123,7 +131,10 @@ func run() error {
 			if err := pool.Ping(ctx); err != nil {
 				return err
 			}
-			return objectStore.Ping(ctx)
+			if err := datasetObjectStore.Ping(ctx); err != nil {
+				return err
+			}
+			return artifactObjectStore.Ping(ctx)
 		},
 	})
 	server := &http.Server{Addr: cfg.HTTPAddr, Handler: router}

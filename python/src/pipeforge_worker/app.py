@@ -2,12 +2,11 @@
 
 from __future__ import annotations
 
-from collections.abc import Iterator, Mapping
-from contextlib import contextmanager
-from typing import BinaryIO
+from collections.abc import Mapping
 
 from pipeforge_worker.config import Settings
-from pipeforge_worker.consumers.job_commands import JobCommandConsumer, RejectingJobHandler
+from pipeforge_worker.consumers.job_commands import JobCommandConsumer
+from pipeforge_worker.consumers.job_execution import ProcessingJobExecutor
 from pipeforge_worker.contracts.validator import ContractValidator
 from pipeforge_worker.messaging.protocols import (
     Consumer,
@@ -19,8 +18,15 @@ from pipeforge_worker.messaging.protocols import (
 from pipeforge_worker.messaging.rabbitmq import CompositeConsumer, RabbitConsumer, RabbitPublisher
 from pipeforge_worker.observability.health import HealthServer, HealthState
 from pipeforge_worker.observability.metrics import WorkerMetrics
+from pipeforge_worker.processors.job_runner import ProcessingJobRunner
+from pipeforge_worker.processors.pipeline import ProcessingPipeline
+from pipeforge_worker.processors.production_operation_dispatcher import (
+    ProductionOperationDispatcher,
+)
+from pipeforge_worker.readers.factory import DatasetReaderFactory
 from pipeforge_worker.runtime import PingingObjectStore, WorkerRuntime
-from pipeforge_worker.storage.minio import MinioObjectStore, StoredObject
+from pipeforge_worker.storage.minio import MinioObjectStore
+from pipeforge_worker.storage.worker_stores import WorkerObjectStores
 from pipeforge_worker.worker.cancellation import CancellationRegistry
 from pipeforge_worker.worker.identity import HeartbeatController, WorkerIdentity
 from pipeforge_worker.worker.lifecycle import WorkerLifecycle
@@ -50,16 +56,6 @@ class IdleConsumer(Consumer):
 class IdleStorage(PingingObjectStore):
     def ping(self) -> None:
         return
-
-    @contextmanager
-    def download_stream(self, _key: str) -> Iterator[BinaryIO]:
-        raise RuntimeError("health-only storage is not available")
-        yield  # pragma: no cover
-
-    def upload_stream(
-        self, _key: str, _stream: BinaryIO, _size: int, _content_type: str
-    ) -> StoredObject:
-        raise RuntimeError("health-only storage is not available")
 
     def close(self) -> None:
         return
@@ -118,12 +114,21 @@ def build_runtime(settings: Settings) -> WorkerRuntime:
         settings.reconnect_delay_seconds,
     )
     consumer = CompositeConsumer((job_consumer, cancellation_consumer))
-    storage = MinioObjectStore(
-        settings.minio_endpoint,
-        settings.minio_access_key,
-        settings.minio_secret_key,
-        settings.minio_secure,
-        settings.dataset_bucket,
+    storage = WorkerObjectStores(
+        source=MinioObjectStore(
+            settings.minio_endpoint,
+            settings.minio_access_key,
+            settings.minio_secret_key,
+            settings.minio_secure,
+            settings.dataset_bucket,
+        ),
+        artifacts=MinioObjectStore(
+            settings.minio_endpoint,
+            settings.minio_access_key,
+            settings.minio_secret_key,
+            settings.minio_secure,
+            settings.artifact_bucket,
+        ),
     )
     heartbeat = HeartbeatController(
         identity,
@@ -133,11 +138,21 @@ def build_runtime(settings: Settings) -> WorkerRuntime:
         settings.events_exchange,
         settings.heartbeat_interval_seconds,
     )
+    cancellations = CancellationRegistry()
+    pipeline = ProcessingPipeline(DatasetReaderFactory(), ProductionOperationDispatcher())
+    executor = ProcessingJobExecutor(
+        publisher,
+        validator,
+        cancellations,
+        identity.worker_id,
+        ProcessingJobRunner(storage.source, storage.artifacts, pipeline),
+        lifecycle,
+    )
     command_consumer = JobCommandConsumer(
         validator,
-        RejectingJobHandler(),
+        executor,
         metrics,
-        cancellation_registry=CancellationRegistry(),
+        cancellation_registry=cancellations,
     )
     return WorkerRuntime(
         settings,

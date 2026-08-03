@@ -15,6 +15,7 @@ import (
 const (
 	MaxEnvelopeBytes = 1 << 20
 
+	MessageJobQueued        = "processing.job.queued"
 	MessageJobRequested     = "processing.job.requested"
 	MessageJobCancel        = "processing.job.cancel-requested"
 	MessageJobStarted       = "processing.job.started"
@@ -31,7 +32,8 @@ var (
 	errEmptyMessageID  = errors.New("message ID is required")
 	messageTypePattern = regexp.MustCompile(`^[a-z][a-z0-9]*(\.[a-z0-9-]+)+$`)
 	knownMessageTypes  = map[string][]string{
-		MessageJobRequested:     {"jobId", "datasetVersionId", "operations"},
+		MessageJobQueued:        {"jobId"},
+		MessageJobRequested:     {"jobId", "datasetVersionId", "attemptId", "leaseId", "workerId", "attemptNumber", "operations", "source"},
 		MessageJobCancel:        {"jobId", "reason"},
 		MessageJobStarted:       {"jobId", "attemptId", "leaseId", "workerId", "attemptNumber"},
 		MessageJobProgressed:    {"jobId", "attemptId", "leaseId", "stage", "processedRows", "progressPercent", "updatedAt"},

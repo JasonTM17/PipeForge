@@ -2,7 +2,6 @@ package lease
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"math/rand"
@@ -72,77 +71,6 @@ func NewRepository(pool *pgxpool.Pool, writer outbox.Enqueuer, config Config) (*
 	return &Repository{pool: pool, outbox: writer, config: config}, nil
 }
 
-func (r *Repository) Acquire(ctx context.Context, command AcquireCommand) (Lease, error) {
-	if r == nil || r.pool == nil || r.outbox == nil {
-		return Lease{}, errors.New("lease repository is not configured")
-	}
-	if command.JobID == uuid.Nil || command.WorkerID == uuid.Nil {
-		return Lease{}, fmt.Errorf("%w: job and worker are required", ErrInvalidInput)
-	}
-	duration, err := normalizeDuration(command.Duration, r.config.LeaseDuration)
-	if err != nil {
-		return Lease{}, err
-	}
-	now := r.config.Clock.Now().UTC()
-	tx, err := r.pool.Begin(ctx)
-	if err != nil {
-		return Lease{}, fmt.Errorf("begin lease acquisition: %w", err)
-	}
-	defer func() { _ = tx.Rollback(ctx) }()
-
-	var item leaseCandidate
-	err = tx.QueryRow(ctx, `
-SELECT j.id, j.state, j.next_attempt_at, j.max_attempts, j.dataset_version_id,
-       a.id, a.attempt_number, a.state
-FROM processing_jobs j
-JOIN job_attempts a ON a.job_id = j.id
-WHERE j.id = $1
-  AND a.attempt_number = (SELECT MAX(attempt_number) FROM job_attempts WHERE job_id = j.id)
-	FOR UPDATE OF j, a`, command.JobID).Scan(
-		&item.JobID, &item.JobState, &item.NextAttemptAt, &item.MaxAttempts, &item.DatasetVersionID,
-		&item.AttemptID, &item.AttemptNumber, &item.AttemptState,
-	)
-	if errors.Is(err, pgx.ErrNoRows) {
-		return Lease{}, job.ErrJobNotFound
-	}
-	if err != nil {
-		return Lease{}, fmt.Errorf("lock job for lease acquisition: %w", err)
-	}
-	if item.JobState != job.StateQueued || item.AttemptState != job.AttemptCreated {
-		return Lease{}, fmt.Errorf("%w: job or attempt is not queued", job.ErrJobState)
-	}
-	if item.NextAttemptAt != nil && item.NextAttemptAt.After(now) {
-		return Lease{}, ErrLeaseNotReady
-	}
-	leaseID := uuid.New()
-	expiresAt := now.Add(duration)
-	if _, err := tx.Exec(ctx, `
-UPDATE job_attempts
-SET state = $2, lease_id = $3, worker_id = $4, leased_at = $5, last_renewed_at = $5, lease_expires_at = $6
-WHERE id = $1`, item.AttemptID, job.AttemptLeased, leaseID, command.WorkerID, now, expiresAt); err != nil {
-		return Lease{}, fmt.Errorf("assign job lease: %w", err)
-	}
-	if _, err := tx.Exec(ctx, `
-UPDATE processing_jobs
-SET state = $2, next_attempt_at = NULL, updated_at = $3
-WHERE id = $1`, item.JobID, job.StateLeased, now); err != nil {
-		return Lease{}, fmt.Errorf("mark job leased: %w", err)
-	}
-	if _, err := tx.Exec(ctx, `
-UPDATE job_quota_counters
-SET queued_count = GREATEST(queued_count - 1, 0), active_count = active_count + 1, updated_at = $2
-WHERE owner_user_id = (SELECT owner_user_id FROM processing_jobs WHERE id = $1)`, item.JobID, now); err != nil {
-		return Lease{}, fmt.Errorf("update lease quota: %w", err)
-	}
-	if err := recordHistory(ctx, tx, item.JobID, job.StateQueued, job.StateLeased, "lease_assigned"); err != nil {
-		return Lease{}, err
-	}
-	if err := tx.Commit(ctx); err != nil {
-		return Lease{}, fmt.Errorf("commit lease acquisition: %w", err)
-	}
-	return Lease{LeaseID: leaseID, JobID: item.JobID, AttemptID: item.AttemptID, WorkerID: command.WorkerID, AttemptNumber: item.AttemptNumber, LeasedAt: now, LeaseExpiresAt: expiresAt, LastRenewedAt: now}, nil
-}
-
 func (r *Repository) Renew(ctx context.Context, command RenewCommand) (Lease, error) {
 	if r == nil || r.pool == nil {
 		return Lease{}, errors.New("lease repository is not configured")
@@ -200,22 +128,10 @@ WHERE lease_id = $1 AND worker_id = $4`, command.LeaseID, now, item.LeaseExpires
 	return item, nil
 }
 
-type leaseCandidate struct {
-	JobID            uuid.UUID
-	JobState         string
-	NextAttemptAt    *time.Time
-	MaxAttempts      int16
-	DatasetVersionID uuid.UUID
-	AttemptID        uuid.UUID
-	AttemptNumber    int
-	AttemptState     string
-}
-
 type expiredCandidate struct {
-	JobID, AttemptID, LeaseID, WorkerID, DatasetVersionID, OwnerUserID uuid.UUID
-	JobState, AttemptState                                             string
-	AttemptNumber, MaxAttempts                                         int
-	Operations                                                         []byte
+	JobID, AttemptID, LeaseID, WorkerID, OwnerUserID uuid.UUID
+	JobState, AttemptState                           string
+	AttemptNumber, MaxAttempts                       int
 }
 
 func (r *Repository) SweepExpired(ctx context.Context, limit int) (SweepReport, error) {
@@ -235,7 +151,7 @@ func (r *Repository) SweepExpired(ctx context.Context, limit int) (SweepReport, 
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 	rows, err := tx.Query(ctx, `
-SELECT j.id, j.state, j.owner_user_id, j.dataset_version_id, j.max_attempts, j.operations,
+SELECT j.id, j.state, j.owner_user_id, j.max_attempts,
        a.id, a.attempt_number, a.state, a.lease_id, a.worker_id
 FROM processing_jobs j
 JOIN job_attempts a ON a.job_id = j.id
@@ -253,7 +169,7 @@ LIMIT $2`, now, limit)
 	candidates := make([]expiredCandidate, 0, limit)
 	for rows.Next() {
 		var item expiredCandidate
-		if err := rows.Scan(&item.JobID, &item.JobState, &item.OwnerUserID, &item.DatasetVersionID, &item.MaxAttempts, &item.Operations, &item.AttemptID, &item.AttemptNumber, &item.AttemptState, &item.LeaseID, &item.WorkerID); err != nil {
+		if err := rows.Scan(&item.JobID, &item.JobState, &item.OwnerUserID, &item.MaxAttempts, &item.AttemptID, &item.AttemptNumber, &item.AttemptState, &item.LeaseID, &item.WorkerID); err != nil {
 			return SweepReport{}, fmt.Errorf("scan expired lease: %w", err)
 		}
 		candidates = append(candidates, item)
@@ -361,16 +277,10 @@ ON CONFLICT (job_id, attempt_id) DO NOTHING`, uuid.New(), item.JobID, item.Attem
 }
 
 func enqueueRetry(ctx context.Context, tx pgx.Tx, writer outbox.Enqueuer, item expiredCandidate, availableAt time.Time) error {
-	var operations []job.Operation
-	if err := json.Unmarshal(item.Operations, &operations); err != nil {
-		return fmt.Errorf("decode retry operations: %w", err)
-	}
 	traceID := item.JobID.String()
-	envelope, err := queue.NewEnvelope(queue.MessageJobRequested, traceID, traceID, item.LeaseID.String(), struct {
-		JobID            uuid.UUID       `json:"jobId"`
-		DatasetVersionID uuid.UUID       `json:"datasetVersionId"`
-		Operations       []job.Operation `json:"operations"`
-	}{JobID: item.JobID, DatasetVersionID: item.DatasetVersionID, Operations: operations})
+	envelope, err := queue.NewEnvelope(queue.MessageJobQueued, traceID, traceID, item.LeaseID.String(), struct {
+		JobID uuid.UUID `json:"jobId"`
+	}{JobID: item.JobID})
 	if err != nil {
 		return fmt.Errorf("create retry command: %w", err)
 	}

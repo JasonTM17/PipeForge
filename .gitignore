@@ -36,6 +36,17 @@ dist/
 .coverage
 htmlcov/
 
+# Frontend dependency and build output
+frontend/node_modules/
+frontend/dist/
+frontend/.npm-cache/
+
+# Local CLI token
+.pipeforge-token
+/go/pipectl.exe
+/release-staging-temp/
+/release-inspect/
+
 # Local runtime data and logs
 /local-data/
 /tmp/

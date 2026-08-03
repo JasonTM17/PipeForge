@@ -61,6 +61,16 @@ func TestRepositoryAppliesAndDeduplicatesResultEvents(t *testing.T) {
 	if err != nil || duplicate.Status != OutcomeDuplicate {
 		t.Fatalf("duplicate result outcome=%+v err=%v", duplicate, err)
 	}
+	lateArtifact, err := queue.NewEnvelope(queue.MessageArtifactCreated, "trace", jobID.String(), "duplicate-worker-command", ArtifactCreatedEvent{
+		JobID: jobID, AttemptID: attemptID, LeaseID: leaseID, ArtifactID: uuid.New(), Kind: "profile", ObjectKey: "reports/" + jobID.String() + "-duplicate.json",
+		SizeBytes: 7, ContentType: "application/json", ChecksumSHA256: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+	})
+	if err != nil {
+		t.Fatalf("late artifact envelope: %v", err)
+	}
+	if outcome, err := repository.Process(ctx, lateArtifact); err != nil || outcome.Status != OutcomeIgnored || outcome.Reason != "artifact_not_referenced_by_succeeded_attempt" {
+		t.Fatalf("late artifact outcome=%+v err=%v", outcome, err)
+	}
 
 	var jobState, attemptState, artifactState string
 	if err := pool.QueryRow(ctx, `SELECT state FROM processing_jobs WHERE id = $1`, jobID).Scan(&jobState); err != nil {
@@ -129,6 +139,7 @@ func TestRepositorySchedulesRetryableFailureThroughDelayedOutbox(t *testing.T) {
 	}
 	var state string
 	var attempts, outboxRows int
+	var outboxType, outboxRoutingKey string
 	if err := pool.QueryRow(ctx, `SELECT state FROM processing_jobs WHERE id = $1`, jobID).Scan(&state); err != nil {
 		t.Fatal(err)
 	}
@@ -138,7 +149,10 @@ func TestRepositorySchedulesRetryableFailureThroughDelayedOutbox(t *testing.T) {
 	if err := pool.QueryRow(ctx, `SELECT COUNT(*) FROM outbox_messages WHERE payload->>'jobId' = $1`, jobID.String()).Scan(&outboxRows); err != nil {
 		t.Fatal(err)
 	}
-	if state != "QUEUED" || attempts != 2 || outboxRows != 1 {
+	if err := pool.QueryRow(ctx, `SELECT message_type, routing_key FROM outbox_messages WHERE payload->>'jobId' = $1`, jobID.String()).Scan(&outboxType, &outboxRoutingKey); err != nil {
+		t.Fatal(err)
+	}
+	if state != "QUEUED" || attempts != 2 || outboxRows != 1 || outboxType != queue.MessageJobQueued || outboxRoutingKey != queue.MessageJobQueued {
 		t.Fatalf("retry was not scheduled: state=%s attempts=%d outbox=%d", state, attempts, outboxRows)
 	}
 }

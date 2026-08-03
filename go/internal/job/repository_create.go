@@ -89,16 +89,14 @@ ON CONFLICT (owner_user_id, idempotency_key) DO NOTHING`, uuid.New(), command.Ow
 			return replayed, true, getErr
 		}
 	}
-	envelope, err := queue.NewEnvelope(queue.MessageJobRequested, command.TraceID, valueOrDefault(command.CorrelationID, jobID.String()), valueOrDefault(command.CausationID, command.TraceID), struct {
-		JobID            uuid.UUID   `json:"jobId"`
-		DatasetVersionID uuid.UUID   `json:"datasetVersionId"`
-		Operations       []Operation `json:"operations"`
-	}{JobID: jobID, DatasetVersionID: command.DatasetVersionID, Operations: command.Operations})
+	envelope, err := queue.NewEnvelope(queue.MessageJobQueued, command.TraceID, valueOrDefault(command.CorrelationID, jobID.String()), valueOrDefault(command.CausationID, command.TraceID), struct {
+		JobID uuid.UUID `json:"jobId"`
+	}{JobID: jobID})
 	if err != nil {
-		return Job{}, false, fmt.Errorf("create job requested envelope: %w", err)
+		return Job{}, false, fmt.Errorf("create job queued envelope: %w", err)
 	}
 	if err := r.outbox.Enqueue(ctx, tx, outbox.Message{ID: envelope.MessageID, Envelope: envelope, Exchange: queue.CommandsExchange, RoutingKey: envelope.MessageType}); err != nil {
-		return Job{}, false, fmt.Errorf("enqueue job requested message: %w", err)
+		return Job{}, false, fmt.Errorf("enqueue job queued message: %w", err)
 	}
 	created, err := getJobTx(ctx, tx, jobID, false)
 	if err != nil {

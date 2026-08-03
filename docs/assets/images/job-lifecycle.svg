@@ -1,0 +1,32 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 760" width="1200" height="760">
+  <style>
+    text { font-family: 'Courier New', monospace; fill: #caf0f8; }
+    .title { font-size: 25px; font-weight: 700; letter-spacing: .08em; }
+    .state { fill: #0d1f3c; stroke: #00b4d8; stroke-width: 2; rx: 4; }
+    .done { fill: #123b3c; stroke: #06d6a0; stroke-width: 2; rx: 4; }
+    .fail { fill: #3d2930; stroke: #f77f00; stroke-width: 2; rx: 4; }
+    .line { fill: none; stroke: #00b4d8; stroke-width: 2; marker-end: url(#arrow); }
+    .retry { fill: none; stroke: #f77f00; stroke-width: 2; stroke-dasharray: 8 5; marker-end: url(#arrow-orange); }
+    .label { font-size: 16px; font-weight: 700; }
+    .sub { font-size: 12px; fill: #90e0ef; }
+  </style>
+  <defs><pattern id="grid" width="30" height="30" patternUnits="userSpaceOnUse"><path d="M30 0H0V30" fill="none" stroke="#112240" stroke-width=".7"/></pattern><marker id="arrow" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto"><path d="M0 0L10 3.5L0 7Z" fill="#00b4d8"/></marker><marker id="arrow-orange" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto"><path d="M0 0L10 3.5L0 7Z" fill="#f77f00"/></marker></defs>
+  <rect width="1200" height="760" fill="#0a1628"/><rect width="1200" height="760" fill="url(#grid)" opacity=".65"/>
+  <text x="48" y="55" class="title">PIPEFORGE / JOB LIFECYCLE</text><text x="48" y="82" class="sub">Every worker attempt is fenced by job, attempt, lease, worker, and attempt number.</text>
+  <circle cx="100" cy="180" r="13" fill="#06d6a0"/><path d="M113 180H210" class="line"/>
+  <rect x="210" y="145" width="180" height="70" class="state"/><text x="300" y="175" text-anchor="middle" class="label">QUEUED</text><text x="300" y="195" text-anchor="middle" class="sub">job.queued signal</text>
+  <path d="M390 180H500" class="line"/><text x="445" y="166" text-anchor="middle" class="sub">lease acquire</text>
+  <rect x="500" y="145" width="180" height="70" class="state"/><text x="590" y="175" text-anchor="middle" class="label">LEASED</text><text x="590" y="195" text-anchor="middle" class="sub">row lock + outbox</text>
+  <path d="M680 180H790" class="line"/><text x="735" y="166" text-anchor="middle" class="sub">dispatch</text>
+  <rect x="790" y="145" width="180" height="70" class="state"/><text x="880" y="175" text-anchor="middle" class="label">RUNNING</text><text x="880" y="195" text-anchor="middle" class="sub">worker attempt</text>
+  <path d="M880 215V310" class="line"/><text x="901" y="270" class="sub">progress</text>
+  <rect x="790" y="310" width="180" height="70" class="done"/><text x="880" y="340" text-anchor="middle" class="label">SUCCEEDED</text><text x="880" y="360" text-anchor="middle" class="sub">canonical artifacts</text>
+  <path d="M790 345H620V470" class="retry"/><text x="675" y="406" text-anchor="middle" class="sub">transient failure</text>
+  <rect x="500" y="470" width="180" height="70" class="fail"/><text x="590" y="500" text-anchor="middle" class="label">RETRYABLE</text><text x="590" y="520" text-anchor="middle" class="sub">backoff + lease expiry</text>
+  <path d="M500 505H300V215" class="retry"/><text x="338" y="490" text-anchor="middle" class="sub">requeue</text>
+  <path d="M880 215V590H390" class="retry"/><text x="650" y="575" text-anchor="middle" class="sub">invalid command / reader error</text>
+  <rect x="210" y="555" width="180" height="70" class="fail"/><text x="300" y="585" text-anchor="middle" class="label">PERMANENT</text><text x="300" y="605" text-anchor="middle" class="sub">no retry</text>
+  <path d="M880 215H1080V310" class="line"/><rect x="990" y="310" width="180" height="70" class="state"/><text x="1080" y="340" text-anchor="middle" class="label">CANCELLED</text><text x="1080" y="360" text-anchor="middle" class="sub">worker ack</text>
+  <path d="M880 215H1080V190" class="line"/><text x="1035" y="178" text-anchor="middle" class="sub">cancel request</text>
+  <rect x="60" y="680" width="1080" height="45" fill="#0d1f3c" stroke="#00b4d8"/><text x="600" y="708" text-anchor="middle" class="sub">RESULT CONSUMER: inbox idempotency → authoritative state transition → artifact canonicalization</text>
+</svg>

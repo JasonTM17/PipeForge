@@ -23,8 +23,18 @@ class JobIdentity:
 
 
 @dataclass(frozen=True, slots=True)
+class ArtifactDescriptor:
+    artifact_id: UUID
+    kind: str
+    object_key: str
+    size_bytes: int
+    content_type: str
+    checksum_sha256: str
+
+
+@dataclass(frozen=True, slots=True)
 class ProcessingRunResult:
-    artifacts: tuple[str, ...] = ()
+    artifacts: tuple[ArtifactDescriptor, ...] = ()
 
 
 ProcessingRunner = Callable[

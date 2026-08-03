@@ -5,16 +5,29 @@ from uuid import uuid4
 
 import pytest
 
+from pipeforge_worker.app import IdleCommandHandler, build_runtime
 from pipeforge_worker.config import Settings
 from pipeforge_worker.consumers.job_commands import JobCommandConsumer, RejectingJobHandler
 from pipeforge_worker.consumers.job_execution import ProcessingJobExecutor, ProcessingRunResult
+from pipeforge_worker.consumers.job_execution_support import ArtifactDescriptor
+from pipeforge_worker.consumers.job_progress import ProgressRelay
 from pipeforge_worker.contracts.envelope import build_envelope
 from pipeforge_worker.contracts.validator import ContractValidator
 from pipeforge_worker.messaging.protocols import Delivery, MessageDisposition, settle_delivery
 from pipeforge_worker.observability.metrics import WorkerMetrics
 from pipeforge_worker.processors.protocols import ProgressSnapshot
+from pipeforge_worker.storage.worker_stores import WorkerObjectStores
 from pipeforge_worker.worker.cancellation import CancellationRegistry
 from pipeforge_worker.worker.identity import HeartbeatController, WorkerIdentity, WorkerStatus
+
+
+def _source() -> dict[str, object]:
+    return {
+        "objectKey": "datasets/fixture/versions/fixture/raw",
+        "contentType": "text/csv",
+        "format": "CSV",
+        "sizeBytes": 64,
+    }
 
 
 class FakeDelivery(Delivery):
@@ -60,7 +73,7 @@ async def test_invalid_job_is_rejected_without_crashing() -> None:
 
 
 @pytest.mark.asyncio
-async def test_valid_command_is_durably_rejected_until_pipeline_exists() -> None:
+async def test_rejecting_handler_durably_rejects_when_explicitly_selected() -> None:
     body = (
         Path(__file__).resolve().parents[2]
         / "contracts"
@@ -137,6 +150,7 @@ async def test_executor_publishes_cancelled_after_cleanup() -> None:
             "leaseId": str(lease_id),
             "workerId": str(worker_id),
             "attemptNumber": 1,
+            "source": _source(),
             "operations": [{"type": "PROFILE_DATASET", "config": {}}],
         },
     )
@@ -183,6 +197,7 @@ async def test_executor_publishes_bounded_progress_before_success() -> None:
             "leaseId": str(lease_id),
             "workerId": str(worker_id),
             "attemptNumber": 1,
+            "source": _source(),
             "operations": [{"type": "PROFILE_DATASET", "config": {}}],
         },
     )
@@ -193,7 +208,18 @@ async def test_executor_publishes_bounded_progress_before_success() -> None:
         context.on_progress(  # type: ignore[attr-defined]
             ProgressSnapshot(rows_processed=100, estimated_rows=200, fraction=0.5)
         )
-        return ProcessingRunResult()
+        return ProcessingRunResult(
+            (
+                ArtifactDescriptor(
+                    artifact_id=uuid4(),
+                    kind="profile",
+                    object_key="reports/fixture/attempt-1/profile.json",
+                    size_bytes=2,
+                    content_type="application/json",
+                    checksum_sha256="0" * 64,
+                ),
+            )
+        )
 
     executor = ProcessingJobExecutor(
         publisher, _validator(), CancellationRegistry(), worker_id, runner
@@ -204,9 +230,88 @@ async def test_executor_publishes_bounded_progress_before_success() -> None:
     assert [message.message_type for message, _, _ in publisher.messages] == [
         "processing.job.started",
         "processing.job.progressed",
+        "processing.artifact.created",
         "processing.job.succeeded",
     ]
     assert publisher.messages[1][0].payload["progressPercent"] == 50.0
+    assert publisher.messages[2][0].payload["kind"] == "profile"
+    assert publisher.messages[3][0].payload["artifacts"] == [
+        "reports/fixture/attempt-1/profile.json"
+    ]
+
+
+@pytest.mark.asyncio
+async def test_progress_relay_keeps_latest_snapshots_with_a_bounded_buffer() -> None:
+    relay = ProgressRelay(max_pending=2)
+    relay.emit(ProgressSnapshot(rows_processed=1, estimated_rows=3, fraction=1 / 3))
+    relay.emit(ProgressSnapshot(rows_processed=2, estimated_rows=3, fraction=2 / 3))
+    relay.emit(ProgressSnapshot(rows_processed=3, estimated_rows=3, fraction=1.0, final=True))
+    await asyncio.sleep(0)
+    published: list[int] = []
+
+    async def done() -> str:
+        return "done"
+
+    result = await relay.wait_for(
+        asyncio.create_task(done()),
+        lambda snapshot: _record_progress(published, snapshot.rows_processed),
+    )
+
+    assert result == "done"
+    assert published == [2, 3]
+
+
+@pytest.mark.asyncio
+async def test_executor_reports_retryable_failure_after_artifact_upload_error() -> None:
+    job_id, attempt_id, lease_id, worker_id = uuid4(), uuid4(), uuid4(), uuid4()
+    command = build_envelope(
+        "processing.job.requested",
+        "trace",
+        str(job_id),
+        "request",
+        {
+            "jobId": str(job_id),
+            "datasetVersionId": str(uuid4()),
+            "attemptId": str(attempt_id),
+            "leaseId": str(lease_id),
+            "workerId": str(worker_id),
+            "attemptNumber": 1,
+            "source": _source(),
+            "operations": [{"type": "PROFILE_DATASET", "config": {}}],
+        },
+    )
+
+    def runner(_command: object, _context: object) -> ProcessingRunResult:
+        raise OSError("artifact bucket unavailable")
+
+    publisher = FakePublisher()
+    executor = ProcessingJobExecutor(
+        publisher, _validator(), CancellationRegistry(), worker_id, runner
+    )
+
+    await executor(command)
+
+    assert [message.message_type for message, _, _ in publisher.messages] == [
+        "processing.job.started",
+        "processing.job.failed",
+    ]
+    assert publisher.messages[-1][0].payload["error"] == {
+        "code": "WORKER_FAILURE",
+        "message": "worker processing failed",
+        "retryable": True,
+    }
+
+
+def test_active_runtime_installs_real_executor_and_health_only_remains_isolated() -> None:
+    contracts_dir = Path(__file__).resolve().parents[2] / "contracts" / "json-schema"
+    active = build_runtime(Settings(contracts_dir=contracts_dir))
+    health_only = build_runtime(Settings(contracts_dir=contracts_dir, health_only=True))
+
+    active_consumer = active.command_handler.__self__
+    assert isinstance(active_consumer, JobCommandConsumer)
+    assert isinstance(active_consumer._handler, ProcessingJobExecutor)
+    assert isinstance(active.storage, WorkerObjectStores)
+    assert isinstance(health_only.command_handler, IdleCommandHandler)
 
 
 @pytest.mark.asyncio
@@ -240,3 +345,7 @@ async def test_heartbeat_is_schema_valid_and_throttled() -> None:
 async def _return_disposition(disposition: MessageDisposition) -> MessageDisposition:
     await asyncio.sleep(0)
     return disposition
+
+
+async def _record_progress(values: list[int], value: int) -> None:
+    values.append(value)

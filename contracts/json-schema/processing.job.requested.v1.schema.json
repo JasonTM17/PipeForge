@@ -10,14 +10,25 @@
         "payload": {
           "type": "object",
           "additionalProperties": false,
-          "required": ["jobId", "datasetVersionId", "operations"],
+          "required": ["jobId", "datasetVersionId", "attemptId", "leaseId", "workerId", "attemptNumber", "operations", "source"],
           "properties": {
             "jobId": { "type": "string", "format": "uuid" },
             "datasetVersionId": { "type": "string", "format": "uuid" },
-            "attemptId": { "type": ["string", "null"], "format": "uuid" },
-            "leaseId": { "type": ["string", "null"], "format": "uuid" },
-            "workerId": { "type": ["string", "null"], "format": "uuid" },
+            "attemptId": { "type": "string", "format": "uuid" },
+            "leaseId": { "type": "string", "format": "uuid" },
+            "workerId": { "type": "string", "format": "uuid" },
             "attemptNumber": { "type": "integer", "minimum": 1 },
+            "source": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["objectKey", "contentType", "format", "sizeBytes"],
+              "properties": {
+                "objectKey": { "type": "string", "minLength": 1, "maxLength": 1024 },
+                "contentType": { "type": "string", "minLength": 1, "maxLength": 255 },
+                "format": { "enum": ["CSV", "JSONL", "PARQUET"] },
+                "sizeBytes": { "type": "integer", "minimum": 0, "maximum": 9223372036854775807 }
+              }
+            },
             "operations": {
               "type": "array",
               "minItems": 1,

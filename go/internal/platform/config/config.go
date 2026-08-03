@@ -9,67 +9,83 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/google/uuid"
 )
 
 const (
-	defaultHTTPAddr                 = ":8080"
-	defaultMaxConnections           = int32(10)
-	defaultShutdown                 = 10 * time.Second
-	defaultAccessTokenTTL           = 15 * time.Minute
-	defaultRefreshTokenTTL          = 30 * 24 * time.Hour
-	defaultDevelopmentJWTKey        = "pipeforge-local-jwt-key-change-me"
-	defaultDevelopmentMinIOKey      = "pipeforge"
-	defaultDevelopmentMinIOSecret   = "pipeforge-local-minio-secret"
-	defaultDevelopmentRabbitMQURL   = "amqp://pipeforge:pipeforge-local-rabbitmq@localhost:55672/"
-	defaultDatasetBucket            = "datasets"
-	defaultMaxUploadBytes           = int64(64 * 1024 * 1024)
-	defaultMultipartPartSize        = int64(8 * 1024 * 1024)
-	defaultMultipartMaxParts        = 10000
-	defaultMultipartMaxBytes        = int64(5 * 1024 * 1024 * 1024)
-	defaultMultipartSessionTTL      = 24 * time.Hour
-	defaultMultipartURLTTL          = 15 * time.Minute
-	defaultMultipartCompletionGrace = time.Hour
-	defaultMultipartCleanupLimit    = 100
-	defaultLeaseDuration            = 2 * time.Minute
-	defaultLeaseRenewalWindow       = 2 * time.Minute
-	defaultLeaseSweepLimit          = 100
+	defaultHTTPAddr                    = ":8080"
+	defaultMaxConnections              = int32(10)
+	defaultShutdown                    = 10 * time.Second
+	defaultAccessTokenTTL              = 15 * time.Minute
+	defaultRefreshTokenTTL             = 30 * 24 * time.Hour
+	defaultDevelopmentJWTKey           = "pipeforge-local-jwt-key-change-me"
+	defaultDevelopmentMinIOKey         = "pipeforge"
+	defaultDevelopmentMinIOSecret      = "pipeforge-local-minio-secret"
+	defaultDevelopmentRabbitMQURL      = "amqp://pipeforge:pipeforge-local-rabbitmq@localhost:55672/"
+	defaultDatasetBucket               = "datasets"
+	defaultArtifactBucket              = "artifacts"
+	defaultMaxUploadBytes              = int64(64 * 1024 * 1024)
+	defaultMultipartPartSize           = int64(8 * 1024 * 1024)
+	defaultMultipartMaxParts           = 10000
+	defaultMultipartMaxBytes           = int64(5 * 1024 * 1024 * 1024)
+	defaultMultipartSessionTTL         = 24 * time.Hour
+	defaultMultipartURLTTL             = 15 * time.Minute
+	defaultMultipartCompletionGrace    = time.Hour
+	defaultMultipartCleanupLimit       = 100
+	defaultLeaseDuration               = 2 * time.Minute
+	defaultLeaseRenewalWindow          = 2 * time.Minute
+	defaultLeaseSweepLimit             = 100
+	defaultDevelopmentDispatchWorkerID = "00000000-0000-0000-0000-000000000001"
+	defaultSchedulerDispatchInterval   = 2 * time.Second
+	defaultOutboxDispatchInterval      = time.Second
+	defaultMaintenanceInterval         = time.Minute
+	defaultSchedulerBatchSize          = 20
+	defaultOutboxBatchSize             = 100
 )
 
 // Config contains validated runtime settings. Secrets are kept in memory only
 // and are never included in String or logging output.
 type Config struct {
-	Environment              string
-	LogLevel                 string
-	HTTPAddr                 string
-	DatabaseHost             string
-	DatabasePort             uint16
-	DatabaseName             string
-	DatabaseUser             string
-	DatabasePassword         string
-	DatabaseMaxConns         int32
-	ShutdownTimeout          time.Duration
-	JWTSigningKey            string
-	AccessTokenTTL           time.Duration
-	RefreshTokenTTL          time.Duration
-	MinIOEndpoint            string
-	MinIOPublicEndpoint      string
-	MinIOAccessKey           string
-	MinIOSecretKey           string
-	MinIOSecure              bool
-	MinIOPublicSecure        bool
-	RabbitMQURL              string
-	DatasetBucket            string
-	MaxUploadBytes           int64
-	MultipartPartSize        int64
-	MultipartMaxParts        int
-	MultipartMaxBytes        int64
-	MultipartSessionTTL      time.Duration
-	MultipartURLTTL          time.Duration
-	MultipartCompletionGrace time.Duration
-	MultipartCleanupLimit    int
-	LeaseDuration            time.Duration
-	LeaseRenewalWindow       time.Duration
-	LeaseSweepLimit          int
+	Environment               string
+	LogLevel                  string
+	HTTPAddr                  string
+	DatabaseHost              string
+	DatabasePort              uint16
+	DatabaseName              string
+	DatabaseUser              string
+	DatabasePassword          string
+	DatabaseMaxConns          int32
+	ShutdownTimeout           time.Duration
+	JWTSigningKey             string
+	AccessTokenTTL            time.Duration
+	RefreshTokenTTL           time.Duration
+	MinIOEndpoint             string
+	MinIOPublicEndpoint       string
+	MinIOAccessKey            string
+	MinIOSecretKey            string
+	MinIOSecure               bool
+	MinIOPublicSecure         bool
+	RabbitMQURL               string
+	DatasetBucket             string
+	ArtifactBucket            string
+	MaxUploadBytes            int64
+	MultipartPartSize         int64
+	MultipartMaxParts         int
+	MultipartMaxBytes         int64
+	MultipartSessionTTL       time.Duration
+	MultipartURLTTL           time.Duration
+	MultipartCompletionGrace  time.Duration
+	MultipartCleanupLimit     int
+	LeaseDuration             time.Duration
+	LeaseRenewalWindow        time.Duration
+	LeaseSweepLimit           int
+	DispatchWorkerID          uuid.UUID
+	SchedulerDispatchInterval time.Duration
+	OutboxDispatchInterval    time.Duration
+	MaintenanceInterval       time.Duration
+	SchedulerBatchSize        int
+	OutboxBatchSize           int
 }
 
 // Load reads environment variables through getenv so tests can provide a
@@ -89,43 +105,58 @@ func Load(getenv func(string) string) (Config, error) {
 	minioEndpoint := getenv("MINIO_ENDPOINT")
 	minioPublicEndpoint := getenv("MINIO_PUBLIC_ENDPOINT")
 	rabbitMQURL := getenv("RABBITMQ_URL")
+	dispatchWorkerID := getenv("PIPEFORGE_DISPATCH_WORKER_ID")
 	if environment == "development" {
 		minioAccessKey = valueOrDefault(minioAccessKey, defaultDevelopmentMinIOKey)
 		minioSecretKey = valueOrDefault(minioSecretKey, defaultDevelopmentMinIOSecret)
 		minioEndpoint = valueOrDefault(minioEndpoint, "localhost:59010")
 		minioPublicEndpoint = valueOrDefault(minioPublicEndpoint, "localhost:59010")
 		rabbitMQURL = valueOrDefault(rabbitMQURL, defaultDevelopmentRabbitMQURL)
+		dispatchWorkerID = valueOrDefault(dispatchWorkerID, defaultDevelopmentDispatchWorkerID)
 	}
 	cfg := Config{
-		Environment:              environment,
-		LogLevel:                 valueOrDefault(getenv("PIPEFORGE_LOG_LEVEL"), "info"),
-		HTTPAddr:                 valueOrDefault(getenv("PIPEFORGE_HTTP_ADDR"), defaultHTTPAddr),
-		DatabaseHost:             valueOrDefault(getenv("POSTGRES_HOST"), "localhost"),
-		DatabaseName:             valueOrDefault(getenv("POSTGRES_DATABASE"), "pipeforge"),
-		DatabaseUser:             valueOrDefault(getenv("POSTGRES_USER"), "pipeforge"),
-		DatabasePassword:         getenv("POSTGRES_PASSWORD"),
-		DatabaseMaxConns:         defaultMaxConnections,
-		ShutdownTimeout:          defaultShutdown,
-		JWTSigningKey:            jwtSigningKey,
-		AccessTokenTTL:           defaultAccessTokenTTL,
-		RefreshTokenTTL:          defaultRefreshTokenTTL,
-		MinIOEndpoint:            minioEndpoint,
-		MinIOPublicEndpoint:      minioPublicEndpoint,
-		MinIOAccessKey:           minioAccessKey,
-		MinIOSecretKey:           minioSecretKey,
-		RabbitMQURL:              rabbitMQURL,
-		DatasetBucket:            valueOrDefault(getenv("MINIO_DATASET_BUCKET"), defaultDatasetBucket),
-		MaxUploadBytes:           defaultMaxUploadBytes,
-		MultipartPartSize:        defaultMultipartPartSize,
-		MultipartMaxParts:        defaultMultipartMaxParts,
-		MultipartMaxBytes:        defaultMultipartMaxBytes,
-		MultipartSessionTTL:      defaultMultipartSessionTTL,
-		MultipartURLTTL:          defaultMultipartURLTTL,
-		MultipartCompletionGrace: defaultMultipartCompletionGrace,
-		MultipartCleanupLimit:    defaultMultipartCleanupLimit,
-		LeaseDuration:            defaultLeaseDuration,
-		LeaseRenewalWindow:       defaultLeaseRenewalWindow,
-		LeaseSweepLimit:          defaultLeaseSweepLimit,
+		Environment:               environment,
+		LogLevel:                  valueOrDefault(getenv("PIPEFORGE_LOG_LEVEL"), "info"),
+		HTTPAddr:                  valueOrDefault(getenv("PIPEFORGE_HTTP_ADDR"), defaultHTTPAddr),
+		DatabaseHost:              valueOrDefault(getenv("POSTGRES_HOST"), "localhost"),
+		DatabaseName:              valueOrDefault(getenv("POSTGRES_DATABASE"), "pipeforge"),
+		DatabaseUser:              valueOrDefault(getenv("POSTGRES_USER"), "pipeforge"),
+		DatabasePassword:          getenv("POSTGRES_PASSWORD"),
+		DatabaseMaxConns:          defaultMaxConnections,
+		ShutdownTimeout:           defaultShutdown,
+		JWTSigningKey:             jwtSigningKey,
+		AccessTokenTTL:            defaultAccessTokenTTL,
+		RefreshTokenTTL:           defaultRefreshTokenTTL,
+		MinIOEndpoint:             minioEndpoint,
+		MinIOPublicEndpoint:       minioPublicEndpoint,
+		MinIOAccessKey:            minioAccessKey,
+		MinIOSecretKey:            minioSecretKey,
+		RabbitMQURL:               rabbitMQURL,
+		DatasetBucket:             valueOrDefault(getenv("MINIO_DATASET_BUCKET"), defaultDatasetBucket),
+		ArtifactBucket:            valueOrDefault(getenv("MINIO_ARTIFACT_BUCKET"), defaultArtifactBucket),
+		MaxUploadBytes:            defaultMaxUploadBytes,
+		MultipartPartSize:         defaultMultipartPartSize,
+		MultipartMaxParts:         defaultMultipartMaxParts,
+		MultipartMaxBytes:         defaultMultipartMaxBytes,
+		MultipartSessionTTL:       defaultMultipartSessionTTL,
+		MultipartURLTTL:           defaultMultipartURLTTL,
+		MultipartCompletionGrace:  defaultMultipartCompletionGrace,
+		MultipartCleanupLimit:     defaultMultipartCleanupLimit,
+		LeaseDuration:             defaultLeaseDuration,
+		LeaseRenewalWindow:        defaultLeaseRenewalWindow,
+		LeaseSweepLimit:           defaultLeaseSweepLimit,
+		SchedulerDispatchInterval: defaultSchedulerDispatchInterval,
+		OutboxDispatchInterval:    defaultOutboxDispatchInterval,
+		MaintenanceInterval:       defaultMaintenanceInterval,
+		SchedulerBatchSize:        defaultSchedulerBatchSize,
+		OutboxBatchSize:           defaultOutboxBatchSize,
+	}
+	if dispatchWorkerID != "" {
+		parsedDispatchWorkerID, parseErr := uuid.Parse(dispatchWorkerID)
+		if parseErr != nil || parsedDispatchWorkerID == uuid.Nil {
+			return Config{}, errors.New("PIPEFORGE_DISPATCH_WORKER_ID must be a non-zero UUID")
+		}
+		cfg.DispatchWorkerID = parsedDispatchWorkerID
 	}
 
 	port, err := parseUint16(valueOrDefault(getenv("POSTGRES_PORT"), "5432"))
@@ -248,6 +279,36 @@ func Load(getenv func(string) string) (Config, error) {
 		}
 		cfg.LeaseSweepLimit = sweepLimit
 	}
+	if raw := getenv("PIPEFORGE_SCHEDULER_DISPATCH_INTERVAL"); raw != "" {
+		cfg.SchedulerDispatchInterval, err = parsePositiveDuration(raw, "PIPEFORGE_SCHEDULER_DISPATCH_INTERVAL")
+		if err != nil {
+			return Config{}, err
+		}
+	}
+	if raw := getenv("PIPEFORGE_OUTBOX_DISPATCH_INTERVAL"); raw != "" {
+		cfg.OutboxDispatchInterval, err = parsePositiveDuration(raw, "PIPEFORGE_OUTBOX_DISPATCH_INTERVAL")
+		if err != nil {
+			return Config{}, err
+		}
+	}
+	if raw := getenv("PIPEFORGE_MAINTENANCE_INTERVAL"); raw != "" {
+		cfg.MaintenanceInterval, err = parsePositiveDuration(raw, "PIPEFORGE_MAINTENANCE_INTERVAL")
+		if err != nil {
+			return Config{}, err
+		}
+	}
+	if raw := getenv("PIPEFORGE_SCHEDULER_BATCH_SIZE"); raw != "" {
+		cfg.SchedulerBatchSize, err = parseBoundedInt(raw, "PIPEFORGE_SCHEDULER_BATCH_SIZE", 1, 1000)
+		if err != nil {
+			return Config{}, err
+		}
+	}
+	if raw := getenv("PIPEFORGE_OUTBOX_BATCH_SIZE"); raw != "" {
+		cfg.OutboxBatchSize, err = parseBoundedInt(raw, "PIPEFORGE_OUTBOX_BATCH_SIZE", 1, 1000)
+		if err != nil {
+			return Config{}, err
+		}
+	}
 
 	if err := cfg.validate(); err != nil {
 		return Config{}, err
@@ -271,8 +332,8 @@ func (c Config) validate() error {
 	if c.Environment != "development" && strings.TrimSpace(c.MinIOPublicEndpoint) == "" {
 		return errors.New("MINIO_PUBLIC_ENDPOINT must be set outside development")
 	}
-	if strings.TrimSpace(c.MinIOAccessKey) == "" || strings.TrimSpace(c.MinIOSecretKey) == "" || strings.TrimSpace(c.DatasetBucket) == "" {
-		return errors.New("MinIO credentials and dataset bucket must not be empty")
+	if strings.TrimSpace(c.MinIOAccessKey) == "" || strings.TrimSpace(c.MinIOSecretKey) == "" || strings.TrimSpace(c.DatasetBucket) == "" || strings.TrimSpace(c.ArtifactBucket) == "" {
+		return errors.New("MinIO credentials and buckets must not be empty")
 	}
 	if strings.TrimSpace(c.RabbitMQURL) == "" {
 		return errors.New("RABBITMQ_URL must be set")
@@ -288,7 +349,7 @@ func (c Config) validate() error {
 	if strings.TrimSpace(c.DatabaseHost) == "" || strings.TrimSpace(c.DatabaseName) == "" || strings.TrimSpace(c.DatabaseUser) == "" {
 		return errors.New("PostgreSQL host, database, and user must not be empty")
 	}
-	if c.DatabasePort == 0 || c.DatabaseMaxConns < 1 || c.ShutdownTimeout <= 0 || c.AccessTokenTTL <= 0 || c.RefreshTokenTTL <= 0 || c.MaxUploadBytes <= 0 || c.MultipartPartSize < 5*1024*1024 || c.MultipartPartSize > 5*1024*1024*1024 || c.MultipartMaxParts < 1 || c.MultipartMaxParts > 10000 || c.MultipartMaxBytes <= 0 || c.MultipartSessionTTL <= 0 || c.MultipartURLTTL <= 0 || c.MultipartURLTTL > 7*24*time.Hour || c.MultipartCompletionGrace <= 0 || c.MultipartCleanupLimit < 1 || c.MultipartCleanupLimit > 1000 || c.LeaseDuration <= 0 || c.LeaseDuration > 30*time.Minute || c.LeaseRenewalWindow <= 0 || c.LeaseRenewalWindow > 30*time.Minute || c.LeaseSweepLimit < 1 || c.LeaseSweepLimit > 1000 {
+	if c.DatabasePort == 0 || c.DatabaseMaxConns < 1 || c.ShutdownTimeout <= 0 || c.AccessTokenTTL <= 0 || c.RefreshTokenTTL <= 0 || c.MaxUploadBytes <= 0 || c.MultipartPartSize < 5*1024*1024 || c.MultipartPartSize > 5*1024*1024*1024 || c.MultipartMaxParts < 1 || c.MultipartMaxParts > 10000 || c.MultipartMaxBytes <= 0 || c.MultipartSessionTTL <= 0 || c.MultipartURLTTL <= 0 || c.MultipartURLTTL > 7*24*time.Hour || c.MultipartCompletionGrace <= 0 || c.MultipartCleanupLimit < 1 || c.MultipartCleanupLimit > 1000 || c.LeaseDuration <= 0 || c.LeaseDuration > 30*time.Minute || c.LeaseRenewalWindow <= 0 || c.LeaseRenewalWindow > 30*time.Minute || c.LeaseSweepLimit < 1 || c.LeaseSweepLimit > 1000 || c.SchedulerDispatchInterval <= 0 || c.SchedulerDispatchInterval > 30*time.Minute || c.OutboxDispatchInterval <= 0 || c.OutboxDispatchInterval > 30*time.Minute || c.MaintenanceInterval <= 0 || c.MaintenanceInterval > 30*time.Minute || c.SchedulerBatchSize < 1 || c.SchedulerBatchSize > 1000 || c.OutboxBatchSize < 1 || c.OutboxBatchSize > 1000 {
 		return errors.New("PostgreSQL, connection, timeout, upload, and multipart limits must be positive and bounded")
 	}
 	if c.MultipartMaxBytes < c.MultipartPartSize || c.MultipartMaxBytes > c.MultipartPartSize*int64(c.MultipartMaxParts) {
@@ -331,4 +392,12 @@ func parsePositiveDuration(value, name string) (time.Duration, error) {
 		return 0, fmt.Errorf("%s must be a positive duration", name)
 	}
 	return duration, nil
+}
+
+func parseBoundedInt(value, name string, minimum, maximum int) (int, error) {
+	parsed, err := strconv.Atoi(value)
+	if err != nil || parsed < minimum || parsed > maximum {
+		return 0, fmt.Errorf("%s must be between %d and %d", name, minimum, maximum)
+	}
+	return parsed, nil
 }

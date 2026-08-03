@@ -268,11 +268,9 @@ func (r *Repository) applyCancelled(ctx context.Context, tx pgx.Tx, event Cancel
 
 func enqueueResultRetry(ctx context.Context, tx pgx.Tx, writer outbox.Enqueuer, item attemptContext, availableAt time.Time) error {
 	traceID := item.JobID.String()
-	envelope, err := queue.NewEnvelope(queue.MessageJobRequested, traceID, traceID, traceID, struct {
-		JobID            uuid.UUID       `json:"jobId"`
-		DatasetVersionID uuid.UUID       `json:"datasetVersionId"`
-		Operations       []job.Operation `json:"operations"`
-	}{JobID: item.JobID, DatasetVersionID: item.DatasetVersionID, Operations: item.Operations})
+	envelope, err := queue.NewEnvelope(queue.MessageJobQueued, traceID, traceID, traceID, struct {
+		JobID uuid.UUID `json:"jobId"`
+	}{JobID: item.JobID})
 	if err != nil {
 		return fmt.Errorf("create result retry command: %w", err)
 	}
@@ -303,6 +301,9 @@ func (r *Repository) applyArtifact(ctx context.Context, tx pgx.Tx, event Artifac
 	state := "STAGED"
 	if canonical {
 		state = "CANONICAL"
+	}
+	if item.JobState == job.StateSucceeded && !canonical {
+		return OutcomeIgnored, "artifact_not_referenced_by_succeeded_attempt", nil
 	}
 	if _, err := tx.Exec(ctx, `
 INSERT INTO job_artifacts (id, owner_user_id, job_id, attempt_id, lease_id, kind, object_key, size_bytes, content_type, checksum_sha256, state)

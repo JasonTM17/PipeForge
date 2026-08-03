@@ -23,7 +23,11 @@ func TestRabbitPublisherConfirmsAndReconnects(t *testing.T) {
 		t.Fatalf("DeclareTopology returned error: %v", err)
 	}
 	envelope, err := NewEnvelope(MessageJobRequested, "trace-integration", "correlation-integration", "causation-integration", map[string]any{
-		"jobId": "22222222-2222-4222-8222-222222222222", "datasetVersionId": "33333333-3333-4333-8333-333333333333", "operations": []any{map[string]any{"type": "PROFILE_DATASET", "config": map[string]any{}}},
+		"jobId": "22222222-2222-4222-8222-222222222222", "datasetVersionId": "33333333-3333-4333-8333-333333333333",
+		"attemptId": "44444444-4444-4444-8444-444444444444", "leaseId": "55555555-5555-4555-8555-555555555555",
+		"workerId": "66666666-6666-4666-8666-666666666666", "attemptNumber": 1,
+		"source":     map[string]any{"objectKey": "datasets/22222222-2222-4222-8222-222222222222/versions/33333333-3333-4333-8333-333333333333/raw", "contentType": "text/csv", "format": "CSV", "sizeBytes": 2048},
+		"operations": []any{map[string]any{"type": "PROFILE_DATASET", "config": map[string]any{}}},
 	})
 	if err != nil {
 		t.Fatal(err)

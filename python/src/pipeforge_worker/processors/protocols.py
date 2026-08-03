@@ -34,6 +34,7 @@ class ProcessingContext:
     attempt_id: UUID
     lease_id: UUID
     worker_id: UUID
+    attempt_number: int = 1
     is_cancelled: Callable[[], bool] = field(default=lambda: False, compare=False, repr=False)
     on_progress: Callable[[ProgressSnapshot], None] = field(
         default=lambda _snapshot: None,

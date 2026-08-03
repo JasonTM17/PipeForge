@@ -10,13 +10,14 @@ from pipeforge_worker.config import Settings
 from pipeforge_worker.messaging.protocols import Consumer, MessageHandler, Publisher
 from pipeforge_worker.observability.health import HealthServer, HealthState
 from pipeforge_worker.observability.metrics import WorkerMetrics
-from pipeforge_worker.storage.minio import ObjectStore
 from pipeforge_worker.worker.identity import HeartbeatController, WorkerStatus
 from pipeforge_worker.worker.lifecycle import WorkerLifecycle
 
 
-class PingingObjectStore(ObjectStore, Protocol):
+class PingingObjectStore(Protocol):
     def ping(self) -> None: ...
+
+    def close(self) -> None: ...
 
 
 class WorkerRuntime:

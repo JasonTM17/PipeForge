@@ -2,84 +2,17 @@ package main
 
 import (
 	"context"
-	"fmt"
 	"log/slog"
 	"os"
-	"time"
-
-	"github.com/JasonTM17/PipeForge/go/internal/dataset"
-	"github.com/JasonTM17/PipeForge/go/internal/lease"
-	"github.com/JasonTM17/PipeForge/go/internal/multipart"
-	"github.com/JasonTM17/PipeForge/go/internal/outbox"
-	"github.com/JasonTM17/PipeForge/go/internal/platform/config"
-	"github.com/JasonTM17/PipeForge/go/internal/platform/database"
-	"github.com/JasonTM17/PipeForge/go/internal/storage"
+	"os/signal"
+	"syscall"
 )
 
 func main() {
-	if err := run(context.Background()); err != nil {
-		slog.Error("multipart cleanup failed", "error", err)
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+	if err := run(ctx); err != nil {
+		slog.Error("scheduler stopped", "error", err)
 		os.Exit(1)
 	}
-}
-
-func run(ctx context.Context) error {
-	cfg, err := config.Load(os.Getenv)
-	if err != nil {
-		return err
-	}
-	pool, err := database.Open(ctx, cfg)
-	if err != nil {
-		return err
-	}
-	defer pool.Close()
-	outboxRepository, err := outbox.NewRepository(pool)
-	if err != nil {
-		return err
-	}
-	leaseConfig := lease.DefaultConfig()
-	leaseConfig.LeaseDuration = cfg.LeaseDuration
-	leaseConfig.RenewalWindow = cfg.LeaseRenewalWindow
-	leaseConfig.SweepLimit = cfg.LeaseSweepLimit
-	leaseRepository, err := lease.NewRepository(pool, outboxRepository, leaseConfig)
-	if err != nil {
-		return err
-	}
-	objectStore, err := storage.NewMinIO(storage.MinIOConfig{
-		Endpoint: cfg.MinIOEndpoint, PublicEndpoint: cfg.MinIOPublicEndpoint, AccessKey: cfg.MinIOAccessKey, SecretKey: cfg.MinIOSecretKey,
-		Secure: cfg.MinIOSecure, PublicSecure: cfg.MinIOPublicSecure, Bucket: cfg.DatasetBucket,
-	})
-	if err != nil {
-		return err
-	}
-	service, err := multipart.NewService(dataset.NewRepository(pool), multipart.NewRepository(pool), objectStore, multipart.Config{
-		PartSize: cfg.MultipartPartSize, MaxParts: cfg.MultipartMaxParts, MaxBytes: cfg.MultipartMaxBytes,
-		SessionTTL: cfg.MultipartSessionTTL, PartURLTTL: cfg.MultipartURLTTL, CompletionGrace: cfg.MultipartCompletionGrace,
-	})
-	if err != nil {
-		return err
-	}
-	cleanupCtx, cancel := context.WithTimeout(ctx, maxCleanupDuration(cfg.ShutdownTimeout))
-	defer cancel()
-	report, err := service.CleanupExpired(cleanupCtx, cfg.MultipartCleanupLimit)
-	if err != nil {
-		return err
-	}
-	slog.Info("multipart cleanup completed", "claimed", report.Claimed, "expired", report.Expired, "reconciled", report.Reconciled, "failed", report.Failed)
-	if len(report.Failures) > 0 {
-		return fmt.Errorf("multipart cleanup completed with %d failures", len(report.Failures))
-	}
-	leaseReport, err := leaseRepository.SweepExpired(cleanupCtx, cfg.LeaseSweepLimit)
-	if err != nil {
-		return err
-	}
-	slog.Info("expired lease sweep completed", "claimed", leaseReport.Claimed, "retried", leaseReport.Retried, "deadLettered", leaseReport.DeadLettered, "cancelled", leaseReport.Cancelled)
-	return nil
-}
-
-func maxCleanupDuration(shutdownTimeout time.Duration) time.Duration {
-	if shutdownTimeout < 5*time.Minute {
-		return 5 * time.Minute
-	}
-	return shutdownTimeout
 }

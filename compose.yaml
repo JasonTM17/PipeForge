@@ -79,6 +79,7 @@ services:
       MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY:?MINIO_ACCESS_KEY is required}
       MINIO_SECRET_KEY: ${MINIO_SECRET_KEY:?MINIO_SECRET_KEY is required}
       MINIO_DATASET_BUCKET: ${MINIO_DATASET_BUCKET:-datasets}
+      MINIO_ARTIFACT_BUCKET: ${MINIO_ARTIFACT_BUCKET:-artifacts}
     volumes:
       - ./infrastructure/minio/init.sh:/opt/pipeforge/init.sh:ro
     entrypoint: ["/bin/sh", "/opt/pipeforge/init.sh"]
@@ -102,12 +103,13 @@ services:
       PIPEFORGE_REFRESH_TOKEN_TTL: ${PIPEFORGE_REFRESH_TOKEN_TTL:-720h}
       RABBITMQ_URL: amqp://${RABBITMQ_USER:?RABBITMQ_USER is required}:${RABBITMQ_PASSWORD:?RABBITMQ_PASSWORD is required}@rabbitmq:5672/
       MINIO_ENDPOINT: minio:9000
-      MINIO_PUBLIC_ENDPOINT: ${MINIO_PUBLIC_ENDPOINT:?MINIO_PUBLIC_ENDPOINT is required}
+      MINIO_PUBLIC_ENDPOINT: ${MINIO_PUBLIC_ENDPOINT:-localhost:59010}
       MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY:?MINIO_ACCESS_KEY is required}
       MINIO_SECRET_KEY: ${MINIO_SECRET_KEY:?MINIO_SECRET_KEY is required}
       MINIO_SECURE: ${MINIO_SECURE:-false}
       MINIO_PUBLIC_SECURE: ${MINIO_PUBLIC_SECURE:-false}
       MINIO_DATASET_BUCKET: ${MINIO_DATASET_BUCKET:-datasets}
+      MINIO_ARTIFACT_BUCKET: ${MINIO_ARTIFACT_BUCKET:-artifacts}
       PIPEFORGE_MAX_UPLOAD_BYTES: ${PIPEFORGE_MAX_UPLOAD_BYTES:-67108864}
       PIPEFORGE_MULTIPART_PART_SIZE: ${PIPEFORGE_MULTIPART_PART_SIZE:-8388608}
       PIPEFORGE_MULTIPART_MAX_PARTS: ${PIPEFORGE_MULTIPART_MAX_PARTS:-10000}
@@ -126,6 +128,10 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+      rabbitmq-init:
+        condition: service_completed_successfully
       minio-init:
         condition: service_completed_successfully
     healthcheck:
@@ -140,7 +146,6 @@ services:
     build:
       context: .
       dockerfile: python/Dockerfile
-    profiles: [worker]
     environment:
       PIPEFORGE_WORKER_ENV: ${PIPEFORGE_ENV:-development}
       PIPEFORGE_WORKER_LOG_LEVEL: ${PIPEFORGE_LOG_LEVEL:-info}
@@ -153,7 +158,8 @@ services:
       PIPEFORGE_WORKER_MAX_CONCURRENCY: ${PIPEFORGE_WORKER_MAX_CONCURRENCY:-2}
       PIPEFORGE_WORKER_PREFETCH: ${PIPEFORGE_WORKER_PREFETCH:-2}
       PIPEFORGE_WORKER_HEARTBEAT_INTERVAL: ${PIPEFORGE_WORKER_HEARTBEAT_INTERVAL:-15}
-      PIPEFORGE_WORKER_HEALTH_ONLY: ${PIPEFORGE_WORKER_HEALTH_ONLY:-true}
+      PIPEFORGE_WORKER_HEALTH_ONLY: ${PIPEFORGE_WORKER_HEALTH_ONLY:-false}
+      PIPEFORGE_WORKER_ID: ${PIPEFORGE_DISPATCH_WORKER_ID:-00000000-0000-0000-0000-000000000001}
       PIPEFORGE_WORKER_HEALTH_HOST: 0.0.0.0
       PIPEFORGE_WORKER_HEALTH_PORT: 8090
       PIPEFORGE_WORKER_MINIO_ENDPOINT: minio:9000
@@ -161,6 +167,7 @@ services:
       PIPEFORGE_WORKER_MINIO_SECRET_KEY: ${MINIO_SECRET_KEY:?MINIO_SECRET_KEY is required}
       PIPEFORGE_WORKER_MINIO_SECURE: ${MINIO_SECURE:-false}
       PIPEFORGE_WORKER_DATASET_BUCKET: ${MINIO_DATASET_BUCKET:-datasets}
+      PIPEFORGE_WORKER_ARTIFACT_BUCKET: ${MINIO_ARTIFACT_BUCKET:-artifacts}
       PIPEFORGE_CONTRACTS_DIR: /opt/pipeforge/contracts/json-schema
     ports:
       - "${PIPEFORGE_WORKER_PORT:-58090}:8090"
@@ -181,7 +188,6 @@ services:
     build:
       context: .
       dockerfile: infrastructure/docker/go-api.Dockerfile
-    profiles: [jobs]
     entrypoint: ["/usr/local/bin/pipeforge-scheduler"]
     environment:
       PIPEFORGE_ENV: ${PIPEFORGE_ENV:-development}
@@ -191,15 +197,22 @@ services:
       PIPEFORGE_LEASE_DURATION: ${PIPEFORGE_LEASE_DURATION:-2m}
       PIPEFORGE_LEASE_RENEWAL_WINDOW: ${PIPEFORGE_LEASE_RENEWAL_WINDOW:-2m}
       PIPEFORGE_LEASE_SWEEP_LIMIT: ${PIPEFORGE_LEASE_SWEEP_LIMIT:-100}
+      PIPEFORGE_DISPATCH_WORKER_ID: ${PIPEFORGE_DISPATCH_WORKER_ID:-00000000-0000-0000-0000-000000000001}
+      PIPEFORGE_SCHEDULER_DISPATCH_INTERVAL: ${PIPEFORGE_SCHEDULER_DISPATCH_INTERVAL:-2s}
+      PIPEFORGE_OUTBOX_DISPATCH_INTERVAL: ${PIPEFORGE_OUTBOX_DISPATCH_INTERVAL:-1s}
+      PIPEFORGE_MAINTENANCE_INTERVAL: ${PIPEFORGE_MAINTENANCE_INTERVAL:-1m}
+      PIPEFORGE_SCHEDULER_BATCH_SIZE: ${PIPEFORGE_SCHEDULER_BATCH_SIZE:-20}
+      PIPEFORGE_OUTBOX_BATCH_SIZE: ${PIPEFORGE_OUTBOX_BATCH_SIZE:-100}
       JWT_SIGNING_KEY: ${JWT_SIGNING_KEY:?JWT_SIGNING_KEY is required}
       RABBITMQ_URL: amqp://${RABBITMQ_USER:?RABBITMQ_USER is required}:${RABBITMQ_PASSWORD:?RABBITMQ_PASSWORD is required}@rabbitmq:5672/
       MINIO_ENDPOINT: minio:9000
-      MINIO_PUBLIC_ENDPOINT: ${MINIO_PUBLIC_ENDPOINT:?MINIO_PUBLIC_ENDPOINT is required}
+      MINIO_PUBLIC_ENDPOINT: ${MINIO_PUBLIC_ENDPOINT:-localhost:59010}
       MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY:?MINIO_ACCESS_KEY is required}
       MINIO_SECRET_KEY: ${MINIO_SECRET_KEY:?MINIO_SECRET_KEY is required}
       MINIO_SECURE: ${MINIO_SECURE:-false}
       MINIO_PUBLIC_SECURE: ${MINIO_PUBLIC_SECURE:-false}
       MINIO_DATASET_BUCKET: ${MINIO_DATASET_BUCKET:-datasets}
+      MINIO_ARTIFACT_BUCKET: ${MINIO_ARTIFACT_BUCKET:-artifacts}
       PIPEFORGE_MULTIPART_PART_SIZE: ${PIPEFORGE_MULTIPART_PART_SIZE:-8388608}
       PIPEFORGE_MULTIPART_MAX_PARTS: ${PIPEFORGE_MULTIPART_MAX_PARTS:-10000}
       PIPEFORGE_MULTIPART_MAX_BYTES: ${PIPEFORGE_MULTIPART_MAX_BYTES:-5368709120}
@@ -215,15 +228,18 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+      rabbitmq-init:
+        condition: service_completed_successfully
       minio-init:
         condition: service_completed_successfully
-    restart: "no"
+    restart: unless-stopped
 
   result-consumer:
     build:
       context: .
       dockerfile: infrastructure/docker/go-api.Dockerfile
-    profiles: [jobs]
     entrypoint: ["/usr/local/bin/pipeforge-result-consumer"]
     environment:
       PIPEFORGE_ENV: ${PIPEFORGE_ENV:-development}
@@ -233,12 +249,13 @@ services:
       RABBITMQ_URL: amqp://${RABBITMQ_USER:?RABBITMQ_USER is required}:${RABBITMQ_PASSWORD:?RABBITMQ_PASSWORD is required}@rabbitmq:5672/
       JWT_SIGNING_KEY: ${JWT_SIGNING_KEY:?JWT_SIGNING_KEY is required}
       MINIO_ENDPOINT: minio:9000
-      MINIO_PUBLIC_ENDPOINT: ${MINIO_PUBLIC_ENDPOINT:?MINIO_PUBLIC_ENDPOINT is required}
+      MINIO_PUBLIC_ENDPOINT: ${MINIO_PUBLIC_ENDPOINT:-localhost:59010}
       MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY:?MINIO_ACCESS_KEY is required}
       MINIO_SECRET_KEY: ${MINIO_SECRET_KEY:?MINIO_SECRET_KEY is required}
       MINIO_SECURE: ${MINIO_SECURE:-false}
       MINIO_PUBLIC_SECURE: ${MINIO_PUBLIC_SECURE:-false}
       MINIO_DATASET_BUCKET: ${MINIO_DATASET_BUCKET:-datasets}
+      MINIO_ARTIFACT_BUCKET: ${MINIO_ARTIFACT_BUCKET:-artifacts}
       POSTGRES_HOST: postgres
       POSTGRES_PORT: 5432
       POSTGRES_DATABASE: ${POSTGRES_DATABASE:?POSTGRES_DATABASE is required}
@@ -247,6 +264,8 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
       rabbitmq-init:
         condition: service_completed_successfully
     restart: unless-stopped
@@ -255,7 +274,6 @@ services:
     build:
       context: .
       dockerfile: infrastructure/docker/go-api.Dockerfile
-    profiles: [tools]
     entrypoint: ["/usr/local/bin/pipeforge-migrate"]
     environment:
       PIPEFORGE_ENV: ${PIPEFORGE_ENV:-development}
@@ -268,6 +286,7 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+    restart: "no"
 
   prometheus:
     image: prom/prometheus:v2.53.1

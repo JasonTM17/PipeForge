@@ -57,8 +57,8 @@ func (p *fakePublisher) Publish(_ context.Context, _, _ string, _ queue.Envelope
 
 func testMessage(t *testing.T, attempts int) Message {
 	t.Helper()
-	envelope, err := queue.NewEnvelope(queue.MessageJobRequested, "trace-1", "correlation-1", "causation-1", map[string]any{
-		"jobId": "77777777-7777-4777-8777-777777777777", "datasetVersionId": "88888888-8888-4888-8888-888888888888", "operations": []string{"profile"},
+	envelope, err := queue.NewEnvelope(queue.MessageJobQueued, "trace-1", "correlation-1", "causation-1", map[string]any{
+		"jobId": "77777777-7777-4777-8777-777777777777",
 	})
 	if err != nil {
 		t.Fatalf("NewEnvelope returned error: %v", err)

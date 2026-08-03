@@ -4,20 +4,86 @@ package lease
 
 import (
 	"context"
+	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"testing"
 	"time"
 
 	"github.com/JasonTM17/PipeForge/go/internal/outbox"
+	"github.com/JasonTM17/PipeForge/go/internal/queue"
 	"github.com/JasonTM17/PipeForge/go/internal/retry"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 type integrationClock struct{ now time.Time }
 
 func (c *integrationClock) Now() time.Time { return c.now }
+
+var errEnqueueAfterWrite = errors.New("enqueue failed after writing outbox message")
+
+type enqueueThenFail struct{ writer outbox.Enqueuer }
+
+func (f enqueueThenFail) Enqueue(ctx context.Context, tx pgx.Tx, message outbox.Message) error {
+	if err := f.writer.Enqueue(ctx, tx, message); err != nil {
+		return err
+	}
+	return errEnqueueAfterWrite
+}
+
+func TestRepositoryAcquireWritesFencedOutboxCommandAtomically(t *testing.T) {
+	dsn := os.Getenv("PIPEFORGE_TEST_DATABASE_URL")
+	if dsn == "" {
+		t.Skip("PIPEFORGE_TEST_DATABASE_URL is not set")
+	}
+	ctx := context.Background()
+	pool, err := pgxpool.New(ctx, dsn)
+	if err != nil {
+		t.Fatalf("pgxpool.New returned error: %v", err)
+	}
+	defer pool.Close()
+	outboxRepository, err := outbox.NewRepository(pool)
+	if err != nil {
+		t.Fatalf("New outbox repository: %v", err)
+	}
+
+	t.Run("acquired lease includes a complete fence and source", func(t *testing.T) {
+		now := time.Now().UTC().Truncate(time.Microsecond)
+		repository, err := NewRepository(pool, outboxRepository, Config{Clock: &integrationClock{now: now}})
+		if err != nil {
+			t.Fatalf("New lease repository: %v", err)
+		}
+		ownerID, datasetID, versionID, jobID, attemptID := uuid.New(), uuid.New(), uuid.New(), uuid.New(), uuid.New()
+		insertLeaseFixture(t, ctx, pool, ownerID, datasetID, versionID, jobID, attemptID)
+		defer cleanupLeaseFixture(t, ctx, pool, ownerID, datasetID, jobID)
+
+		lease, err := repository.Acquire(ctx, AcquireCommand{JobID: jobID, WorkerID: uuid.New()})
+		if err != nil {
+			t.Fatalf("Acquire returned error: %v", err)
+		}
+		assertAcquiredLeaseOutbox(t, ctx, pool, jobID, versionID, lease)
+	})
+
+	t.Run("failed acquire rolls back the outbox command and lease state", func(t *testing.T) {
+		now := time.Now().UTC().Truncate(time.Microsecond)
+		repository, err := NewRepository(pool, enqueueThenFail{writer: outboxRepository}, Config{Clock: &integrationClock{now: now}})
+		if err != nil {
+			t.Fatalf("New lease repository: %v", err)
+		}
+		ownerID, datasetID, versionID, jobID, attemptID := uuid.New(), uuid.New(), uuid.New(), uuid.New(), uuid.New()
+		insertLeaseFixture(t, ctx, pool, ownerID, datasetID, versionID, jobID, attemptID)
+		defer cleanupLeaseFixture(t, ctx, pool, ownerID, datasetID, jobID)
+
+		_, err = repository.Acquire(ctx, AcquireCommand{JobID: jobID, WorkerID: uuid.New()})
+		if !errors.Is(err, errEnqueueAfterWrite) {
+			t.Fatalf("Acquire error = %v, want %v", err, errEnqueueAfterWrite)
+		}
+		assertFailedAcquireRolledBack(t, ctx, pool, jobID)
+	})
+}
 
 func TestRepositoryAcquiresRenewsRecoversAndDeadLettersLeases(t *testing.T) {
 	dsn := os.Getenv("PIPEFORGE_TEST_DATABASE_URL")
@@ -87,8 +153,87 @@ func TestRepositoryAcquiresRenewsRecoversAndDeadLettersLeases(t *testing.T) {
 	if err := pool.QueryRow(ctx, `SELECT COUNT(*)::text FROM outbox_messages WHERE payload->>'jobId' = $1`, jobID.String()).Scan(&outboxRows); err != nil {
 		t.Fatal(err)
 	}
-	if jobState != "DEAD_LETTERED" || attemptCount != "2" || deadLetters != "1" || outboxRows != "1" || second.AttemptNumber != 2 {
+	if jobState != "DEAD_LETTERED" || attemptCount != "2" || deadLetters != "1" || outboxRows != "3" || second.AttemptNumber != 2 {
 		t.Fatalf("lease recovery incomplete: state=%s attempts=%s deadLetters=%s outbox=%s second=%+v", jobState, attemptCount, deadLetters, outboxRows, second)
+	}
+}
+
+func assertAcquiredLeaseOutbox(t *testing.T, ctx context.Context, pool *pgxpool.Pool, jobID, versionID uuid.UUID, lease Lease) {
+	t.Helper()
+	var messageType, exchange, routingKey string
+	var encodedPayload []byte
+	if err := pool.QueryRow(ctx, `
+SELECT message_type, exchange, routing_key, payload
+FROM outbox_messages
+WHERE payload->>'jobId' = $1`, jobID.String()).Scan(&messageType, &exchange, &routingKey, &encodedPayload); err != nil {
+		t.Fatalf("select acquired lease outbox message: %v", err)
+	}
+	if messageType != queue.MessageJobRequested || exchange != queue.CommandsExchange || routingKey != queue.MessageJobRequested {
+		t.Fatalf("unexpected acquired lease routing: type=%s exchange=%s routing=%s", messageType, exchange, routingKey)
+	}
+
+	var payload struct {
+		JobID            uuid.UUID         `json:"jobId"`
+		DatasetVersionID uuid.UUID         `json:"datasetVersionId"`
+		AttemptID        uuid.UUID         `json:"attemptId"`
+		LeaseID          uuid.UUID         `json:"leaseId"`
+		WorkerID         uuid.UUID         `json:"workerId"`
+		AttemptNumber    int               `json:"attemptNumber"`
+		Operations       []json.RawMessage `json:"operations"`
+		Source           requestedSource   `json:"source"`
+	}
+	if err := json.Unmarshal(encodedPayload, &payload); err != nil {
+		t.Fatalf("decode acquired lease outbox payload: %v", err)
+	}
+	if payload.JobID != jobID || payload.DatasetVersionID != versionID || payload.AttemptID != lease.AttemptID ||
+		payload.LeaseID != lease.LeaseID || payload.WorkerID != lease.WorkerID || payload.AttemptNumber != lease.AttemptNumber {
+		t.Fatalf("acquired lease fence was incomplete or mismatched: %+v", payload)
+	}
+	if len(payload.Operations) != 1 {
+		t.Fatalf("acquired lease command did not include operations: %s", encodedPayload)
+	}
+	if payload.Source != (requestedSource{
+		ObjectKey: "fixtures/" + versionID.String(), ContentType: "text/csv", Format: "CSV", SizeBytes: 4096,
+	}) {
+		t.Fatalf("acquired lease source was not authoritative: %+v", payload.Source)
+	}
+
+	var rawPayload map[string]json.RawMessage
+	if err := json.Unmarshal(encodedPayload, &rawPayload); err != nil {
+		t.Fatalf("decode raw acquired lease payload: %v", err)
+	}
+	var rawSource map[string]json.RawMessage
+	if err := json.Unmarshal(rawPayload["source"], &rawSource); err != nil {
+		t.Fatalf("decode acquired lease source: %v", err)
+	}
+	if len(rawSource) != 4 {
+		t.Fatalf("acquired lease source contains unexpected fields: %v", rawSource)
+	}
+	if _, found := rawSource["originalFilename"]; found {
+		t.Fatalf("acquired lease source leaked user-controlled filename: %v", rawSource)
+	}
+}
+
+func assertFailedAcquireRolledBack(t *testing.T, ctx context.Context, pool *pgxpool.Pool, jobID uuid.UUID) {
+	t.Helper()
+	var jobState, attemptState string
+	var leaseID, workerID *uuid.UUID
+	if err := pool.QueryRow(ctx, `
+SELECT j.state, a.state, a.lease_id, a.worker_id
+FROM processing_jobs j
+JOIN job_attempts a ON a.job_id = j.id
+WHERE j.id = $1`, jobID).Scan(&jobState, &attemptState, &leaseID, &workerID); err != nil {
+		t.Fatalf("select failed acquisition state: %v", err)
+	}
+	if jobState != "QUEUED" || attemptState != "CREATED" || leaseID != nil || workerID != nil {
+		t.Fatalf("failed acquisition changed lease state: job=%s attempt=%s lease=%v worker=%v", jobState, attemptState, leaseID, workerID)
+	}
+	var commands int
+	if err := pool.QueryRow(ctx, `SELECT COUNT(*) FROM outbox_messages WHERE payload->>'jobId' = $1`, jobID.String()).Scan(&commands); err != nil {
+		t.Fatalf("count failed acquisition outbox commands: %v", err)
+	}
+	if commands != 0 {
+		t.Fatalf("failed acquisition left %d outbox commands", commands)
 	}
 }
 
@@ -100,7 +245,7 @@ func insertLeaseFixture(t *testing.T, ctx context.Context, pool *pgxpool.Pool, o
 	if _, err := pool.Exec(ctx, `INSERT INTO datasets (id, owner_user_id, name, state) VALUES ($1, $2, $3, 'AVAILABLE')`, datasetID, ownerID, "lease-"+datasetID.String()); err != nil {
 		t.Fatalf("insert lease dataset: %v", err)
 	}
-	if _, err := pool.Exec(ctx, `INSERT INTO dataset_versions (id, dataset_id, version_number, state, original_filename, content_type, format, object_key, artifact_prefix, created_by, available_at) VALUES ($1, $2, 1, 'AVAILABLE', 'fixture.csv', 'text/csv', 'CSV', $3, $4, $5, NOW())`, versionID, datasetID, "fixtures/"+versionID.String(), "artifacts/"+versionID.String(), ownerID); err != nil {
+	if _, err := pool.Exec(ctx, `INSERT INTO dataset_versions (id, dataset_id, version_number, state, original_filename, content_type, format, size_bytes, object_key, artifact_prefix, created_by, available_at) VALUES ($1, $2, 1, 'AVAILABLE', 'fixture.csv', 'text/csv', 'CSV', 4096, $3, $4, $5, NOW())`, versionID, datasetID, "fixtures/"+versionID.String(), "artifacts/"+versionID.String(), ownerID); err != nil {
 		t.Fatalf("insert lease version: %v", err)
 	}
 	if _, err := pool.Exec(ctx, `INSERT INTO processing_jobs (id, owner_user_id, dataset_version_id, state, operations, request_fingerprint, priority, max_attempts, queued_at) VALUES ($1, $2, $3, 'QUEUED', '[{"type":"PROFILE_DATASET","config":{}}]'::jsonb, repeat('b', 64), 0, 2, NOW())`, jobID, ownerID, versionID); err != nil {
