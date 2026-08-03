@@ -4,7 +4,7 @@ Version: `0.2.3-local`
 
 This folder is the release evidence for the verified local runtime. It is not
 a production certification and does not claim cloud availability, autoscaling,
-multi-region scheduling, or a finalized license.
+or multi-region scheduling.
 
 ## Included evidence
 
@@ -26,9 +26,8 @@ The project follows semantic-version-shaped tags. `0.x` means the public API
 and contracts may still evolve. A release candidate must include passing CI,
 contract validation, a clean review, and a fresh Compose E2E run. A production
 release requires a reviewed deployment design, backup/restore test, SLOs,
-external security assessment, and an owner-selected license. The repository
-threat model documents current controls and residual risks; it is not a
-penetration-test result.
+and an external security assessment. The repository threat model documents
+current controls and residual risks; it is not a penetration-test result.
 
 ## Rollback
 

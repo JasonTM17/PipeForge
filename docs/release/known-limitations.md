@@ -25,4 +25,3 @@
   full operational control surface.
 - Authentication rate limiting is bounded but process-local. Multi-replica
   deployment requires a shared limiter and an explicit trusted-proxy policy.
-- License selection is intentionally deferred to the repository owner.

@@ -2,7 +2,7 @@
 
 PipeForge is a production-oriented distributed data-processing platform for uploading datasets, scheduling analysis jobs, processing data with Python workers, and accepting results through a reliable Go control plane.
 
-> Status: The local runtime path is verified end to end: upload → capability-aware multi-worker scheduling → lease-bound dispatch → Python processing → canonical artifacts → authorized download. This is a serious learning repository with production-oriented boundaries, not a production deployment. Cloud HA and a selected license remain intentionally out of scope.
+> Status: The local runtime path is verified end to end: upload → capability-aware multi-worker scheduling → lease-bound dispatch → Python processing → canonical artifacts → authorized download. This is a serious learning repository with production-oriented boundaries, not a production deployment. Cloud HA remains intentionally out of scope.
 
 ## Architecture
 
@@ -175,4 +175,6 @@ The full A-to-Z plan is [here](plans/20260801-1300-pipeforge-platform/plan.md), 
 
 ## License
 
-License selection is intentionally deferred until the project owner chooses one. Do not assume an open-source license from this repository alone.
+PipeForge is licensed under the [Apache License 2.0](LICENSE). It permits use,
+modification, and distribution, including commercial use, subject to the
+license terms and preservation requirements.
