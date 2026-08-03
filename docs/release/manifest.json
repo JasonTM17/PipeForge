@@ -23,6 +23,6 @@
     "e2eFlow": "docs/assets/videos/local-e2e-flow.gif",
     "provenance": "Generated from the real local make e2e run; no credentials or source rows included."
   },
-  "license": "owner-decision-pending",
+  "license": "Apache-2.0",
   "productionStatus": "not-production-certified"
 }

@@ -27,9 +27,9 @@
 - Five public multi-architecture images are available from both GHCR and Docker
   Hub with immutable digests, SBOMs, provenance, attestations, and runtime
   metadata checks.
+- The repository is open source under the Apache License 2.0.
 
 ## Not included
 
 This release does not include cloud deployment, production credentials,
-autoscaling, multi-region availability, an operational SLA, or a selected
-open-source license.
+autoscaling, multi-region availability, or an operational SLA.
