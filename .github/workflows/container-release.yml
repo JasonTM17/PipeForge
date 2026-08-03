@@ -6,7 +6,7 @@ on:
       version:
         description: Container version without a leading v
         required: true
-        default: 0.2.1-local
+        default: 0.2.2-local
         type: string
   release:
     types: [published]
@@ -152,13 +152,20 @@ jobs:
           push-to-registry: true
 
       - name: Scan published image
-        uses: aquasecurity/trivy-action@b6643a29fecd7f34b3597bc6acb0a98b03d33ff8
-        with:
-          image-ref: ${{ env.GHCR_IMAGE }}@${{ steps.build.outputs.digest }}
-          format: table
-          severity: HIGH,CRITICAL
-          ignore-unfixed: true
-          exit-code: 1
+        env:
+          IMAGE_DIGEST: ${{ steps.build.outputs.digest }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker run --rm \
+            aquasec/trivy@sha256:7cced7cae583819fc7806d4cbc0dbbc7cad18b99f7d3e235192e6da8c091045c \
+            image \
+            --scanners vuln \
+            --skip-version-check \
+            --exit-code 1 \
+            --ignore-unfixed \
+            --severity HIGH,CRITICAL \
+            "${DOCKERHUB_IMAGE}@${IMAGE_DIGEST}"
 
       - name: Verify runtime metadata
         env:

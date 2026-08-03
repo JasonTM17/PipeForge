@@ -11,7 +11,7 @@ RUN CGO_ENABLED=0 go build -trimpath -ldflags='-s -w' -o /out/pipeforge-migrate 
 RUN CGO_ENABLED=0 go build -trimpath -ldflags='-s -w' -o /out/pipeforge-scheduler ./cmd/scheduler
 RUN CGO_ENABLED=0 go build -trimpath -ldflags='-s -w' -o /out/pipeforge-result-consumer ./cmd/result-consumer
 
-FROM alpine:3.20 AS runtime
+FROM alpine:3.23.5 AS runtime
 
 RUN addgroup -S pipeforge && adduser -S -G pipeforge pipeforge \
     && apk add --no-cache ca-certificates
