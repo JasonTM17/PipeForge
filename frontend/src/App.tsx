@@ -1,7 +1,27 @@
-import { FormEvent, useEffect, useState } from "react";
-import { Artifact, Dataset, Job, authenticate, loadArtifacts, loadDatasets, loadJobs } from "./api";
+import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
+import {
+  APIError,
+  Artifact,
+  Dataset,
+  Job,
+  authenticate,
+  isAbortError,
+  loadArtifacts,
+  loadDatasets,
+  loadJobs,
+} from "./api";
+import ConsoleView from "./console-view";
 
 const tokenKey = "pipeforge.accessToken";
+const selectedJobParameter = "job";
+
+function initialSelectedJob() {
+  return new URLSearchParams(window.location.search).get(selectedJobParameter) ?? "";
+}
+
+function errorMessage(reason: unknown, fallback: string) {
+  return reason instanceof Error ? reason.message : fallback;
+}
 
 export default function App() {
   const [token, setToken] = useState(() => sessionStorage.getItem(tokenKey) ?? "");
@@ -10,65 +30,154 @@ export default function App() {
   const [datasets, setDatasets] = useState<Dataset[]>([]);
   const [jobs, setJobs] = useState<Job[]>([]);
   const [artifacts, setArtifacts] = useState<Artifact[]>([]);
-  const [selectedJob, setSelectedJob] = useState("");
+  const [selectedJob, setSelectedJob] = useState(initialSelectedJob);
   const [error, setError] = useState("");
+  const [status, setStatus] = useState("");
   const [loading, setLoading] = useState(false);
+  const [signingIn, setSigningIn] = useState(false);
+  const [jobsLoaded, setJobsLoaded] = useState(false);
+  const [refreshVersion, setRefreshVersion] = useState(0);
+  const sessionGeneration = useRef(0);
 
-  useEffect(() => {
-    if (!token) return;
-    void refresh(token);
-  }, [token]);
-
-  async function refresh(accessToken: string) {
-    setLoading(true);
-    setError("");
-    try {
-      const [datasetPage, jobPage] = await Promise.all([loadDatasets(accessToken), loadJobs(accessToken)]);
-      setDatasets(datasetPage.items);
-      setJobs(jobPage.items);
-      if (selectedJob && jobPage.items.some((job) => job.id === selectedJob)) {
-        setArtifacts((await loadArtifacts(accessToken, selectedJob)).items);
-      }
-    } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "Unable to load the console");
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  async function signIn(event: FormEvent) {
-    event.preventDefault();
-    setError("");
-    try {
-      const response = await authenticate(email, password);
-      sessionStorage.setItem(tokenKey, response.accessToken);
-      setToken(response.accessToken);
-    } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "Authentication failed");
-    }
-  }
-
-  function signOut() {
+  const clearSession = useCallback((message = "") => {
+    sessionGeneration.current += 1;
     sessionStorage.removeItem(tokenKey);
     setToken("");
     setDatasets([]);
     setJobs([]);
     setArtifacts([]);
-  }
+    setSelectedJob("");
+    setJobsLoaded(false);
+    setLoading(false);
+    setError("");
+    setStatus(message);
+    const url = new URL(window.location.href);
+    url.searchParams.delete(selectedJobParameter);
+    window.history.replaceState({}, "", url);
+  }, []);
 
-  async function selectJob(jobId: string) {
-    setSelectedJob(jobId);
+  const handleRequestError = useCallback(
+    (reason: unknown, generation: number, fallback: string) => {
+      if (isAbortError(reason) || generation !== sessionGeneration.current) return;
+      if (reason instanceof APIError && reason.status === 401) {
+        clearSession("Your session expired. Sign in again.");
+        return;
+      }
+      setError(errorMessage(reason, fallback));
+    },
+    [clearSession],
+  );
+
+  useEffect(() => {
+    if (!token) return undefined;
+    const controller = new AbortController();
+    const generation = sessionGeneration.current;
+    setLoading(true);
+    setError("");
+    setArtifacts([]);
+    setJobsLoaded(false);
+    void Promise.all([loadDatasets(token, controller.signal), loadJobs(token, controller.signal)])
+      .then(([datasetPage, jobPage]) => {
+        if (generation !== sessionGeneration.current) return;
+        setDatasets(datasetPage.items);
+        setJobs(jobPage.items);
+        setJobsLoaded(true);
+      })
+      .catch((reason: unknown) => handleRequestError(reason, generation, "Unable to load the console"))
+      .finally(() => {
+        if (!controller.signal.aborted && generation === sessionGeneration.current) setLoading(false);
+      });
+    return () => controller.abort();
+  }, [handleRequestError, refreshVersion, token]);
+
+  useEffect(() => {
+    if (!token || !jobsLoaded) return undefined;
+    if (!selectedJob || !jobs.some((job) => job.id === selectedJob)) {
+      if (selectedJob) setSelectedJob("");
+      setArtifacts([]);
+      return undefined;
+    }
+    const controller = new AbortController();
+    const generation = sessionGeneration.current;
+    setArtifacts([]);
+    setError("");
+    void loadArtifacts(token, selectedJob, controller.signal)
+      .then((page) => {
+        if (!controller.signal.aborted && generation === sessionGeneration.current) setArtifacts(page.items);
+      })
+      .catch((reason: unknown) => handleRequestError(reason, generation, "Unable to load artifacts"));
+    return () => controller.abort();
+  }, [handleRequestError, jobs, jobsLoaded, selectedJob, token]);
+
+  useEffect(() => {
+    const url = new URL(window.location.href);
+    if (selectedJob) {
+      url.searchParams.set(selectedJobParameter, selectedJob);
+    } else {
+      url.searchParams.delete(selectedJobParameter);
+    }
+    window.history.replaceState({}, "", url);
+  }, [selectedJob]);
+
+  async function signIn(event: FormEvent) {
+    event.preventDefault();
+    setSigningIn(true);
+    setError("");
+    setStatus("");
     try {
-      setArtifacts((await loadArtifacts(token, jobId)).items);
+      const response = await authenticate(email, password);
+      sessionGeneration.current += 1;
+      sessionStorage.setItem(tokenKey, response.accessToken);
+      setPassword("");
+      setToken(response.accessToken);
+      setStatus("Signed in.");
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "Unable to load artifacts");
+      if (!isAbortError(reason)) setError(errorMessage(reason, "Authentication failed"));
+    } finally {
+      setSigningIn(false);
     }
   }
 
-  if (!token) {
-    return <main className="auth-shell"><form className="auth-card" onSubmit={signIn}><span className="eyebrow">PIPEFORGE / LOCAL CONSOLE</span><h1>See the pipeline clearly.</h1><p>Sign in with a local PipeForge account to inspect real owner-scoped data.</p><label>Email<input value={email} onChange={(event) => setEmail(event.target.value)} type="email" required /></label><label>Password<input value={password} onChange={(event) => setPassword(event.target.value)} type="password" required /></label>{error && <p className="error">{error}</p>}<button type="submit">Open console</button></form></main>;
+  function signOut() {
+    clearSession("Signed out.");
   }
 
-  const succeeded = jobs.filter((job) => job.state === "SUCCEEDED").length;
-  return <main className="app-shell"><header><div><span className="eyebrow">PIPEFORGE / OPERATOR VIEW</span><h1>Runtime signal, without the noise.</h1></div><div className="header-actions"><button className="secondary" onClick={() => void refresh(token)} disabled={loading}>{loading ? "Refreshing…" : "Refresh"}</button><button className="secondary" onClick={signOut}>Sign out</button></div></header>{error && <div className="error banner">{error}</div>}<section className="kpis"><div><span>Datasets</span><strong>{datasets.length}</strong></div><div><span>Jobs observed</span><strong>{jobs.length}</strong></div><div><span>Succeeded</span><strong>{succeeded}</strong></div><div><span>Selected artifacts</span><strong>{artifacts.length}</strong></div></section><section className="grid"><article><div className="section-title"><h2>Recent jobs</h2><span>live API data</span></div>{jobs.length === 0 ? <p className="muted">No jobs are visible for this account.</p> : <div className="table">{jobs.map((job) => <button className={`row ${selectedJob === job.id ? "selected" : ""}`} key={job.id} onClick={() => void selectJob(job.id)}><span className="mono">{job.id.slice(0, 8)}</span><span className={`state state-${job.state.toLowerCase()}`}>{job.state}</span><span>{new Date(job.updatedAt).toLocaleString()}</span></button>)}</div>}</article><article><div className="section-title"><h2>Datasets</h2><span>owner scoped</span></div>{datasets.length === 0 ? <p className="muted">No datasets are visible for this account.</p> : <div className="table">{datasets.map((dataset) => <div className="row" key={dataset.id}><span>{dataset.name}</span><span className="state">{dataset.state}</span><span>{new Date(dataset.updatedAt).toLocaleDateString()}</span></div>)}</div>}</article><article className="wide"><div className="section-title"><h2>Canonical artifacts</h2><span>{selectedJob ? `job ${selectedJob.slice(0, 8)}` : "select a job"}</span></div>{artifacts.length === 0 ? <p className="muted">Select a job to inspect its canonical artifacts.</p> : <div className="artifact-list">{artifacts.map((artifact) => <div className="artifact" key={artifact.id}><span className="artifact-mark">●</span><div><strong>{artifact.kind}</strong><small>{artifact.state} · {artifact.sizeBytes.toLocaleString()} bytes</small></div></div>)}</div>}</article></section></main>;
+  function selectJob(jobId: string) {
+    setSelectedJob(jobId);
+  }
+
+  if (!token) {
+    return (
+      <main className="auth-shell" id="main-content">
+        <form className="auth-card" onSubmit={signIn} aria-busy={signingIn}>
+          <span className="eyebrow">PIPEFORGE / LOCAL CONSOLE</span>
+          <h1>See the pipeline clearly.</h1>
+          <p>Sign in with a local PipeForge account to inspect real owner-scoped data.</p>
+          <label htmlFor="email">Email</label>
+          <input id="email" value={email} onChange={(event) => setEmail(event.target.value)} type="email" autoComplete="email" required />
+          <label htmlFor="password">Password</label>
+          <input id="password" value={password} onChange={(event) => setPassword(event.target.value)} type="password" autoComplete="current-password" required />
+          {status && <p className="status" role="status">{status}</p>}
+          {error && <p className="error" role="alert">{error}</p>}
+          <button type="submit" disabled={signingIn}>{signingIn ? "Signing in…" : "Open console"}</button>
+        </form>
+      </main>
+    );
+  }
+
+  return (
+    <ConsoleView
+      artifacts={artifacts}
+      datasets={datasets}
+      error={error}
+      jobs={jobs}
+      jobsLoaded={jobsLoaded}
+      loading={loading}
+      onRefresh={() => setRefreshVersion((value) => value + 1)}
+      onSelectJob={selectJob}
+      onSignOut={signOut}
+      selectedJob={selectedJob}
+      status={status}
+    />
+  );
 }
