@@ -13,6 +13,15 @@ import (
 
 const (
 	defaultHTTPAddr                  = ":8080"
+	defaultHTTPReadHeaderTimeout     = 5 * time.Second
+	defaultHTTPReadTimeout           = 10 * time.Minute
+	defaultHTTPWriteTimeout          = 10 * time.Minute
+	defaultHTTPIdleTimeout           = 2 * time.Minute
+	defaultHTTPMaxHeaderBytes        = 1 << 20
+	defaultAuthRateLimitPerMinute    = 60
+	defaultAuthRateLimitBurst        = 10
+	defaultAuthRateLimitMaxClients   = 10000
+	defaultAuthRateLimitEntryTTL     = 15 * time.Minute
 	defaultMaxConnections            = int32(10)
 	defaultShutdown                  = 10 * time.Second
 	defaultAccessTokenTTL            = 15 * time.Minute
@@ -48,6 +57,15 @@ type Config struct {
 	Environment               string
 	LogLevel                  string
 	HTTPAddr                  string
+	HTTPReadHeaderTimeout     time.Duration
+	HTTPReadTimeout           time.Duration
+	HTTPWriteTimeout          time.Duration
+	HTTPIdleTimeout           time.Duration
+	HTTPMaxHeaderBytes        int
+	AuthRateLimitPerMinute    int
+	AuthRateLimitBurst        int
+	AuthRateLimitMaxClients   int
+	AuthRateLimitEntryTTL     time.Duration
 	DatabaseHost              string
 	DatabasePort              uint16
 	DatabaseName              string
@@ -114,6 +132,15 @@ func Load(getenv func(string) string) (Config, error) {
 		Environment:               environment,
 		LogLevel:                  valueOrDefault(getenv("PIPEFORGE_LOG_LEVEL"), "info"),
 		HTTPAddr:                  valueOrDefault(getenv("PIPEFORGE_HTTP_ADDR"), defaultHTTPAddr),
+		HTTPReadHeaderTimeout:     defaultHTTPReadHeaderTimeout,
+		HTTPReadTimeout:           defaultHTTPReadTimeout,
+		HTTPWriteTimeout:          defaultHTTPWriteTimeout,
+		HTTPIdleTimeout:           defaultHTTPIdleTimeout,
+		HTTPMaxHeaderBytes:        defaultHTTPMaxHeaderBytes,
+		AuthRateLimitPerMinute:    defaultAuthRateLimitPerMinute,
+		AuthRateLimitBurst:        defaultAuthRateLimitBurst,
+		AuthRateLimitMaxClients:   defaultAuthRateLimitMaxClients,
+		AuthRateLimitEntryTTL:     defaultAuthRateLimitEntryTTL,
 		DatabaseHost:              valueOrDefault(getenv("POSTGRES_HOST"), "localhost"),
 		DatabaseName:              valueOrDefault(getenv("POSTGRES_DATABASE"), "pipeforge"),
 		DatabaseUser:              valueOrDefault(getenv("POSTGRES_USER"), "pipeforge"),
@@ -166,6 +193,37 @@ func Load(getenv func(string) string) (Config, error) {
 		cfg.ShutdownTimeout, err = parsePositiveDuration(raw, "PIPEFORGE_SHUTDOWN_TIMEOUT")
 		if err != nil {
 			return Config{}, err
+		}
+	}
+	for name, destination := range map[string]*time.Duration{
+		"PIPEFORGE_HTTP_READ_HEADER_TIMEOUT":  &cfg.HTTPReadHeaderTimeout,
+		"PIPEFORGE_HTTP_READ_TIMEOUT":         &cfg.HTTPReadTimeout,
+		"PIPEFORGE_HTTP_WRITE_TIMEOUT":        &cfg.HTTPWriteTimeout,
+		"PIPEFORGE_HTTP_IDLE_TIMEOUT":         &cfg.HTTPIdleTimeout,
+		"PIPEFORGE_AUTH_RATE_LIMIT_ENTRY_TTL": &cfg.AuthRateLimitEntryTTL,
+	} {
+		if raw := getenv(name); raw != "" {
+			*destination, err = parsePositiveDuration(raw, name)
+			if err != nil {
+				return Config{}, err
+			}
+		}
+	}
+	for name, setting := range map[string]struct {
+		destination *int
+		minimum     int
+		maximum     int
+	}{
+		"PIPEFORGE_HTTP_MAX_HEADER_BYTES":       {&cfg.HTTPMaxHeaderBytes, 1024, 16 << 20},
+		"PIPEFORGE_AUTH_RATE_LIMIT_PER_MINUTE":  {&cfg.AuthRateLimitPerMinute, 1, 100000},
+		"PIPEFORGE_AUTH_RATE_LIMIT_BURST":       {&cfg.AuthRateLimitBurst, 1, 10000},
+		"PIPEFORGE_AUTH_RATE_LIMIT_MAX_CLIENTS": {&cfg.AuthRateLimitMaxClients, 1, 1000000},
+	} {
+		if raw := getenv(name); raw != "" {
+			*setting.destination, err = parseBoundedInt(raw, name, setting.minimum, setting.maximum)
+			if err != nil {
+				return Config{}, err
+			}
 		}
 	}
 
@@ -344,7 +402,7 @@ func (c Config) validate() error {
 	if strings.TrimSpace(c.DatabaseHost) == "" || strings.TrimSpace(c.DatabaseName) == "" || strings.TrimSpace(c.DatabaseUser) == "" {
 		return errors.New("PostgreSQL host, database, and user must not be empty")
 	}
-	if c.DatabasePort == 0 || c.DatabaseMaxConns < 1 || c.ShutdownTimeout <= 0 || c.AccessTokenTTL <= 0 || c.RefreshTokenTTL <= 0 || c.MaxUploadBytes <= 0 || c.MultipartPartSize < 5*1024*1024 || c.MultipartPartSize > 5*1024*1024*1024 || c.MultipartMaxParts < 1 || c.MultipartMaxParts > 10000 || c.MultipartMaxBytes <= 0 || c.MultipartSessionTTL <= 0 || c.MultipartURLTTL <= 0 || c.MultipartURLTTL > 7*24*time.Hour || c.MultipartCompletionGrace <= 0 || c.MultipartCleanupLimit < 1 || c.MultipartCleanupLimit > 1000 || c.LeaseDuration <= 0 || c.LeaseDuration > 30*time.Minute || c.LeaseRenewalWindow <= 0 || c.LeaseRenewalWindow > 30*time.Minute || c.LeaseSweepLimit < 1 || c.LeaseSweepLimit > 1000 || c.WorkerHeartbeatTTL <= 0 || c.WorkerHeartbeatTTL > 30*time.Minute || c.SchedulerDispatchInterval <= 0 || c.SchedulerDispatchInterval > 30*time.Minute || c.OutboxDispatchInterval <= 0 || c.OutboxDispatchInterval > 30*time.Minute || c.MaintenanceInterval <= 0 || c.MaintenanceInterval > 30*time.Minute || c.SchedulerBatchSize < 1 || c.SchedulerBatchSize > 1000 || c.OutboxBatchSize < 1 || c.OutboxBatchSize > 1000 {
+	if c.DatabasePort == 0 || c.DatabaseMaxConns < 1 || c.ShutdownTimeout <= 0 || c.HTTPReadHeaderTimeout <= 0 || c.HTTPReadTimeout <= 0 || c.HTTPWriteTimeout <= 0 || c.HTTPIdleTimeout <= 0 || c.HTTPMaxHeaderBytes < 1024 || c.HTTPMaxHeaderBytes > 16<<20 || c.AuthRateLimitPerMinute < 1 || c.AuthRateLimitBurst < 1 || c.AuthRateLimitMaxClients < 1 || c.AuthRateLimitEntryTTL <= 0 || c.AccessTokenTTL <= 0 || c.RefreshTokenTTL <= 0 || c.MaxUploadBytes <= 0 || c.MultipartPartSize < 5*1024*1024 || c.MultipartPartSize > 5*1024*1024*1024 || c.MultipartMaxParts < 1 || c.MultipartMaxParts > 10000 || c.MultipartMaxBytes <= 0 || c.MultipartSessionTTL <= 0 || c.MultipartURLTTL <= 0 || c.MultipartURLTTL > 7*24*time.Hour || c.MultipartCompletionGrace <= 0 || c.MultipartCleanupLimit < 1 || c.MultipartCleanupLimit > 1000 || c.LeaseDuration <= 0 || c.LeaseDuration > 30*time.Minute || c.LeaseRenewalWindow <= 0 || c.LeaseRenewalWindow > 30*time.Minute || c.LeaseSweepLimit < 1 || c.LeaseSweepLimit > 1000 || c.WorkerHeartbeatTTL <= 0 || c.WorkerHeartbeatTTL > 30*time.Minute || c.SchedulerDispatchInterval <= 0 || c.SchedulerDispatchInterval > 30*time.Minute || c.OutboxDispatchInterval <= 0 || c.OutboxDispatchInterval > 30*time.Minute || c.MaintenanceInterval <= 0 || c.MaintenanceInterval > 30*time.Minute || c.SchedulerBatchSize < 1 || c.SchedulerBatchSize > 1000 || c.OutboxBatchSize < 1 || c.OutboxBatchSize > 1000 {
 		return errors.New("PostgreSQL, connection, timeout, upload, and multipart limits must be positive and bounded")
 	}
 	if c.MultipartMaxBytes < c.MultipartPartSize || c.MultipartMaxBytes > c.MultipartPartSize*int64(c.MultipartMaxParts) {

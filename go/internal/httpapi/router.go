@@ -19,16 +19,17 @@ import (
 )
 
 type Dependencies struct {
-	Logger    *slog.Logger
-	Metrics   *observability.Metrics
-	Readiness func(context.Context) error
-	Identity  *identity.Service
-	Dataset   *dataset.Service
-	Multipart *multipart.Service
-	Job       *job.Service
-	Quality   *quality.Service
-	Result    *result.Service
-	DLQ       *dlq.Service
+	Logger          *slog.Logger
+	Metrics         *observability.Metrics
+	Readiness       func(context.Context) error
+	Identity        *identity.Service
+	Dataset         *dataset.Service
+	Multipart       *multipart.Service
+	Job             *job.Service
+	Quality         *quality.Service
+	Result          *result.Service
+	DLQ             *dlq.Service
+	AuthRateLimiter *AuthRateLimiter
 }
 
 func NewRouter(deps Dependencies) http.Handler {
@@ -50,7 +51,7 @@ func NewRouter(deps Dependencies) http.Handler {
 	router.Get("/health/ready", readyHandler(deps.Readiness))
 	router.Handle("/metrics", deps.Metrics.Handler())
 	if deps.Identity != nil {
-		registerIdentityRoutes(router, deps.Identity)
+		registerIdentityRoutes(router, deps.Identity, deps.AuthRateLimiter)
 		if deps.Dataset != nil {
 			registerDatasetRoutes(router, deps.Identity, deps.Dataset)
 		}

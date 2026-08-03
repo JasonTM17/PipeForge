@@ -11,6 +11,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 )
 
 type client struct {
@@ -24,7 +25,7 @@ func main() {
 		usage()
 		os.Exit(2)
 	}
-	c := client{baseURL: envOr("PIPEFORGE_API_URL", "http://localhost:58080"), tokenFile: envOr("PIPEFORGE_TOKEN_FILE", ".pipeforge-token"), http: http.DefaultClient}
+	c := client{baseURL: envOr("PIPEFORGE_API_URL", "http://localhost:58080"), tokenFile: envOr("PIPEFORGE_TOKEN_FILE", ".pipeforge-token"), http: &http.Client{Timeout: 10 * time.Minute}}
 	var err error
 	switch os.Args[1] {
 	case "login":
