@@ -153,6 +153,86 @@ func TestRepositoryRollsBackWhenOutboxEnqueueFails(t *testing.T) {
 	}
 }
 
+func TestRepositoryRoutesActiveCancellationAndRetryToScheduler(t *testing.T) {
+	dsn := os.Getenv("PIPEFORGE_TEST_DATABASE_URL")
+	if dsn == "" {
+		t.Skip("PIPEFORGE_TEST_DATABASE_URL is not set")
+	}
+	ctx := context.Background()
+	pool, err := pgxpool.New(ctx, dsn)
+	if err != nil {
+		t.Fatalf("pgxpool.New returned error: %v", err)
+	}
+	defer pool.Close()
+	outboxRepository, err := outbox.NewRepository(pool)
+	if err != nil {
+		t.Fatalf("outbox.NewRepository returned error: %v", err)
+	}
+	repository, err := NewRepository(pool, outboxRepository)
+	if err != nil {
+		t.Fatalf("NewRepository returned error: %v", err)
+	}
+	ownerID, datasetID, versionID := uuid.New(), uuid.New(), uuid.New()
+	insertFixture(t, ctx, pool, ownerID, datasetID, versionID)
+	defer cleanupFixture(t, ctx, pool, ownerID, datasetID)
+
+	create := func(key string) Job {
+		item, _, createErr := repository.Create(ctx, CreateCommand{
+			OwnerUserID: ownerID, ActorUserID: ownerID, DatasetVersionID: versionID,
+			Operations:     []Operation{{Type: "PROFILE_DATASET", Config: map[string]any{}}},
+			IdempotencyKey: key, MaxAttempts: 5, TraceID: key,
+		})
+		if createErr != nil {
+			t.Fatalf("Create(%s) returned error: %v", key, createErr)
+		}
+		if _, deleteErr := pool.Exec(ctx, `DELETE FROM outbox_messages WHERE payload->>'jobId' = $1`, item.ID.String()); deleteErr != nil {
+			t.Fatalf("delete initial queued message: %v", deleteErr)
+		}
+		return item
+	}
+
+	cancelJob := create("integration-cancel-routing")
+	workerID, leaseID := uuid.New(), uuid.New()
+	if _, err := pool.Exec(ctx, `UPDATE processing_jobs SET state = 'LEASED' WHERE id = $1`, cancelJob.ID); err != nil {
+		t.Fatalf("lease cancellation fixture job: %v", err)
+	}
+	if _, err := pool.Exec(ctx, `UPDATE job_attempts SET state = 'LEASED', worker_id = $2, lease_id = $3, leased_at = NOW(), lease_expires_at = NOW() + INTERVAL '1 minute' WHERE job_id = $1`, cancelJob.ID, workerID, leaseID); err != nil {
+		t.Fatalf("lease cancellation fixture attempt: %v", err)
+	}
+	if _, err := repository.RequestCancel(ctx, CancelCommand{JobID: cancelJob.ID, ActorUserID: ownerID}); err != nil {
+		t.Fatalf("RequestCancel returned error: %v", err)
+	}
+	var cancelType, cancelRoute string
+	if err := pool.QueryRow(ctx, `SELECT message_type, routing_key FROM outbox_messages WHERE payload->>'jobId' = $1`, cancelJob.ID.String()).Scan(&cancelType, &cancelRoute); err != nil {
+		t.Fatalf("select cancellation outbox message: %v", err)
+	}
+	expectedCancelRoute, err := queue.WorkerRoutingKey(queue.MessageJobCancel, workerID)
+	if err != nil {
+		t.Fatalf("WorkerRoutingKey returned error: %v", err)
+	}
+	if cancelType != queue.MessageJobCancel || cancelRoute != expectedCancelRoute {
+		t.Fatalf("active cancellation route type=%q route=%q, want type=%q route=%q", cancelType, cancelRoute, queue.MessageJobCancel, expectedCancelRoute)
+	}
+
+	retryJob := create("integration-retry-routing")
+	if _, err := pool.Exec(ctx, `UPDATE processing_jobs SET state = 'FAILED_PERMANENT' WHERE id = $1`, retryJob.ID); err != nil {
+		t.Fatalf("fail retry fixture job: %v", err)
+	}
+	if _, err := pool.Exec(ctx, `UPDATE job_attempts SET state = 'FAILED', finished_at = NOW() WHERE job_id = $1`, retryJob.ID); err != nil {
+		t.Fatalf("fail retry fixture attempt: %v", err)
+	}
+	if _, err := repository.RequestRetry(ctx, RetryCommand{JobID: retryJob.ID, ActorUserID: ownerID}); err != nil {
+		t.Fatalf("RequestRetry returned error: %v", err)
+	}
+	var retryType, retryRoute string
+	if err := pool.QueryRow(ctx, `SELECT message_type, routing_key FROM outbox_messages WHERE payload->>'jobId' = $1`, retryJob.ID.String()).Scan(&retryType, &retryRoute); err != nil {
+		t.Fatalf("select retry outbox message: %v", err)
+	}
+	if retryType != queue.MessageJobQueued || retryRoute != queue.MessageJobQueued {
+		t.Fatalf("retry route type=%q route=%q, want scheduler queued signal", retryType, retryRoute)
+	}
+}
+
 type failingEnqueuer struct{ err error }
 
 func (f failingEnqueuer) Enqueue(context.Context, pgx.Tx, outbox.Message) error {

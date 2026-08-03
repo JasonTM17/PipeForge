@@ -40,8 +40,11 @@ func (r *Repository) Acquire(ctx context.Context, command AcquireCommand) (Lease
 	if r == nil || r.pool == nil || r.outbox == nil {
 		return Lease{}, errors.New("lease repository is not configured")
 	}
-	if command.JobID == uuid.Nil || command.WorkerID == uuid.Nil {
-		return Lease{}, fmt.Errorf("%w: job and worker are required", ErrInvalidInput)
+	if command.JobID == uuid.Nil {
+		return Lease{}, fmt.Errorf("%w: job is required", ErrInvalidInput)
+	}
+	if r.config.WorkerSelector == nil {
+		return Lease{}, errors.New("lease repository requires a worker selector for acquisition")
 	}
 	duration, err := normalizeDuration(command.Duration, r.config.LeaseDuration)
 	if err != nil {
@@ -67,12 +70,23 @@ func (r *Repository) Acquire(ctx context.Context, command AcquireCommand) (Lease
 	if item.SizeBytes == nil {
 		return Lease{}, fmt.Errorf("lease source size is missing for dataset version %s", item.DatasetVersionID)
 	}
+	operationTypes, err := decodeOperationTypes(item.Operations)
+	if err != nil {
+		return Lease{}, err
+	}
+	workerID, available, err := r.config.WorkerSelector.SelectForLease(ctx, tx, operationTypes, now)
+	if err != nil {
+		return Lease{}, fmt.Errorf("select worker for lease: %w", err)
+	}
+	if !available || workerID == uuid.Nil {
+		return Lease{}, ErrWorkerUnavailable
+	}
 
 	lease := Lease{
 		LeaseID:        uuid.New(),
 		JobID:          item.JobID,
 		AttemptID:      item.AttemptID,
-		WorkerID:       command.WorkerID,
+		WorkerID:       workerID,
 		AttemptNumber:  item.AttemptNumber,
 		LeasedAt:       now,
 		LeaseExpiresAt: now.Add(duration),
@@ -187,10 +201,37 @@ func newAcquireCommand(item leaseCandidate, lease Lease) (outbox.Message, error)
 	if err != nil {
 		return outbox.Message{}, err
 	}
+	routingKey, err := queue.WorkerRoutingKey(queue.MessageJobRequested, lease.WorkerID)
+	if err != nil {
+		return outbox.Message{}, err
+	}
 	return outbox.Message{
 		ID:         envelope.MessageID,
 		Envelope:   envelope,
 		Exchange:   queue.CommandsExchange,
-		RoutingKey: envelope.MessageType,
+		RoutingKey: routingKey,
 	}, nil
+}
+
+func decodeOperationTypes(encoded []byte) ([]string, error) {
+	var operations []job.Operation
+	if err := json.Unmarshal(encoded, &operations); err != nil {
+		return nil, fmt.Errorf("decode lease operations for worker selection: %w", err)
+	}
+	if len(operations) == 0 {
+		return nil, fmt.Errorf("%w: lease operations are required", ErrInvalidInput)
+	}
+	types := make([]string, 0, len(operations))
+	seen := make(map[string]struct{}, len(operations))
+	for _, operation := range operations {
+		if operation.Type == "" {
+			return nil, fmt.Errorf("%w: lease operation type is required", ErrInvalidInput)
+		}
+		if _, exists := seen[operation.Type]; exists {
+			continue
+		}
+		seen[operation.Type] = struct{}{}
+		types = append(types, operation.Type)
+	}
+	return types, nil
 }

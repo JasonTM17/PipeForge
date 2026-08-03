@@ -34,7 +34,11 @@ func TestNewAcquireCommandIncludesCompleteFenceAndSource(t *testing.T) {
 	if err != nil {
 		t.Fatalf("newAcquireCommand returned error: %v", err)
 	}
-	if message.ID != message.Envelope.MessageID || message.Exchange != queue.CommandsExchange || message.RoutingKey != queue.MessageJobRequested {
+	expectedRoutingKey, err := queue.WorkerRoutingKey(queue.MessageJobRequested, lease.WorkerID)
+	if err != nil {
+		t.Fatalf("WorkerRoutingKey returned error: %v", err)
+	}
+	if message.ID != message.Envelope.MessageID || message.Exchange != queue.CommandsExchange || message.RoutingKey != expectedRoutingKey {
 		t.Fatalf("unexpected outbox message metadata: %+v", message)
 	}
 

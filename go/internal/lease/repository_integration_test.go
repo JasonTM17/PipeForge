@@ -14,6 +14,7 @@ import (
 	"github.com/JasonTM17/PipeForge/go/internal/outbox"
 	"github.com/JasonTM17/PipeForge/go/internal/queue"
 	"github.com/JasonTM17/PipeForge/go/internal/retry"
+	"github.com/JasonTM17/PipeForge/go/internal/workerregistry"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -22,6 +23,12 @@ import (
 type integrationClock struct{ now time.Time }
 
 func (c *integrationClock) Now() time.Time { return c.now }
+
+type fixedWorkerSelector struct{ workerID uuid.UUID }
+
+func (s fixedWorkerSelector) SelectForLease(context.Context, pgx.Tx, []string, time.Time) (uuid.UUID, bool, error) {
+	return s.workerID, s.workerID != uuid.Nil, nil
+}
 
 var errEnqueueAfterWrite = errors.New("enqueue failed after writing outbox message")
 
@@ -52,7 +59,8 @@ func TestRepositoryAcquireWritesFencedOutboxCommandAtomically(t *testing.T) {
 
 	t.Run("acquired lease includes a complete fence and source", func(t *testing.T) {
 		now := time.Now().UTC().Truncate(time.Microsecond)
-		repository, err := NewRepository(pool, outboxRepository, Config{Clock: &integrationClock{now: now}})
+		workerID := uuid.New()
+		repository, err := NewRepository(pool, outboxRepository, Config{Clock: &integrationClock{now: now}, WorkerSelector: fixedWorkerSelector{workerID: workerID}})
 		if err != nil {
 			t.Fatalf("New lease repository: %v", err)
 		}
@@ -60,7 +68,7 @@ func TestRepositoryAcquireWritesFencedOutboxCommandAtomically(t *testing.T) {
 		insertLeaseFixture(t, ctx, pool, ownerID, datasetID, versionID, jobID, attemptID)
 		defer cleanupLeaseFixture(t, ctx, pool, ownerID, datasetID, jobID)
 
-		lease, err := repository.Acquire(ctx, AcquireCommand{JobID: jobID, WorkerID: uuid.New()})
+		lease, err := repository.Acquire(ctx, AcquireCommand{JobID: jobID})
 		if err != nil {
 			t.Fatalf("Acquire returned error: %v", err)
 		}
@@ -69,7 +77,7 @@ func TestRepositoryAcquireWritesFencedOutboxCommandAtomically(t *testing.T) {
 
 	t.Run("failed acquire rolls back the outbox command and lease state", func(t *testing.T) {
 		now := time.Now().UTC().Truncate(time.Microsecond)
-		repository, err := NewRepository(pool, enqueueThenFail{writer: outboxRepository}, Config{Clock: &integrationClock{now: now}})
+		repository, err := NewRepository(pool, enqueueThenFail{writer: outboxRepository}, Config{Clock: &integrationClock{now: now}, WorkerSelector: fixedWorkerSelector{workerID: uuid.New()}})
 		if err != nil {
 			t.Fatalf("New lease repository: %v", err)
 		}
@@ -77,7 +85,7 @@ func TestRepositoryAcquireWritesFencedOutboxCommandAtomically(t *testing.T) {
 		insertLeaseFixture(t, ctx, pool, ownerID, datasetID, versionID, jobID, attemptID)
 		defer cleanupLeaseFixture(t, ctx, pool, ownerID, datasetID, jobID)
 
-		_, err = repository.Acquire(ctx, AcquireCommand{JobID: jobID, WorkerID: uuid.New()})
+		_, err = repository.Acquire(ctx, AcquireCommand{JobID: jobID})
 		if !errors.Is(err, errEnqueueAfterWrite) {
 			t.Fatalf("Acquire error = %v, want %v", err, errEnqueueAfterWrite)
 		}
@@ -103,7 +111,7 @@ func TestRepositoryAcquiresRenewsRecoversAndDeadLettersLeases(t *testing.T) {
 	now := time.Now().UTC().Truncate(time.Microsecond)
 	clock := &integrationClock{now: now}
 	policy := retry.Policy{MaxAttempts: 2, Delays: []time.Duration{0, 10 * time.Second}, JitterFraction: 0}
-	repository, err := NewRepository(pool, outboxRepository, Config{LeaseDuration: 10 * time.Second, RenewalWindow: 10 * time.Second, SweepLimit: 10, RetryPolicy: policy, Clock: clock})
+	repository, err := NewRepository(pool, outboxRepository, Config{LeaseDuration: 10 * time.Second, RenewalWindow: 10 * time.Second, SweepLimit: 10, RetryPolicy: policy, Clock: clock, WorkerSelector: fixedWorkerSelector{workerID: uuid.New()}})
 	if err != nil {
 		t.Fatalf("New lease repository: %v", err)
 	}
@@ -112,7 +120,7 @@ func TestRepositoryAcquiresRenewsRecoversAndDeadLettersLeases(t *testing.T) {
 	insertLeaseFixture(t, ctx, pool, ownerID, datasetID, versionID, jobID, attemptID)
 	defer cleanupLeaseFixture(t, ctx, pool, ownerID, datasetID, jobID)
 
-	first, err := repository.Acquire(ctx, AcquireCommand{JobID: jobID, WorkerID: uuid.New()})
+	first, err := repository.Acquire(ctx, AcquireCommand{JobID: jobID})
 	if err != nil {
 		t.Fatalf("Acquire returned error: %v", err)
 	}
@@ -130,7 +138,7 @@ func TestRepositoryAcquiresRenewsRecoversAndDeadLettersLeases(t *testing.T) {
 		t.Fatalf("first sweep report=%+v err=%v", recovered, err)
 	}
 	clock.now = now.Add(30 * time.Second)
-	second, err := repository.Acquire(ctx, AcquireCommand{JobID: jobID, WorkerID: uuid.New()})
+	second, err := repository.Acquire(ctx, AcquireCommand{JobID: jobID})
 	if err != nil {
 		t.Fatalf("Acquire retry returned error: %v", err)
 	}
@@ -158,6 +166,81 @@ func TestRepositoryAcquiresRenewsRecoversAndDeadLettersLeases(t *testing.T) {
 	}
 }
 
+func TestRepositoryConcurrentAcquireDoesNotOversubscribeWorker(t *testing.T) {
+	dsn := os.Getenv("PIPEFORGE_TEST_DATABASE_URL")
+	if dsn == "" {
+		t.Skip("PIPEFORGE_TEST_DATABASE_URL is not set")
+	}
+	ctx := context.Background()
+	pool, err := pgxpool.New(ctx, dsn)
+	if err != nil {
+		t.Fatalf("pgxpool.New returned error: %v", err)
+	}
+	defer pool.Close()
+	outboxRepository, err := outbox.NewRepository(pool)
+	if err != nil {
+		t.Fatalf("New outbox repository: %v", err)
+	}
+	now := time.Now().UTC().Truncate(time.Microsecond)
+	clock := &integrationClock{now: now}
+	workers, err := workerregistry.NewRepository(pool, workerregistry.Config{HeartbeatTTL: time.Minute, Clock: clock})
+	if err != nil {
+		t.Fatalf("New worker registry: %v", err)
+	}
+	workerID := uuid.New()
+	if err := workers.ApplyRegistration(ctx, workerregistry.Registration{
+		WorkerID: workerID, InstanceID: "capacity-instance", Hostname: "capacity.local",
+		SupportedOperations: []string{"PROFILE_DATASET"}, SoftwareVersion: "integration",
+		MaxConcurrency: 1, StartedAt: now,
+	}); err != nil {
+		t.Fatalf("ApplyRegistration returned error: %v", err)
+	}
+	if err := workers.ApplyHeartbeat(ctx, workerregistry.Heartbeat{
+		WorkerID: workerID, InstanceID: "capacity-instance", Hostname: "capacity.local",
+		SupportedOperations: []string{"PROFILE_DATASET"}, SoftwareVersion: "integration",
+		Status: workerregistry.StatusReady, MaxConcurrency: 1, ObservedAt: now.Add(time.Second),
+	}); err != nil {
+		t.Fatalf("ApplyHeartbeat returned error: %v", err)
+	}
+	repository, err := NewRepository(pool, outboxRepository, Config{Clock: clock, WorkerSelector: workers})
+	if err != nil {
+		t.Fatalf("New lease repository: %v", err)
+	}
+	firstOwner, firstDataset, firstVersion, firstJob, firstAttempt := uuid.New(), uuid.New(), uuid.New(), uuid.New(), uuid.New()
+	secondOwner, secondDataset, secondVersion, secondJob, secondAttempt := uuid.New(), uuid.New(), uuid.New(), uuid.New(), uuid.New()
+	insertLeaseFixture(t, ctx, pool, firstOwner, firstDataset, firstVersion, firstJob, firstAttempt)
+	insertLeaseFixture(t, ctx, pool, secondOwner, secondDataset, secondVersion, secondJob, secondAttempt)
+	defer cleanupLeaseFixture(t, ctx, pool, firstOwner, firstDataset, firstJob)
+	defer cleanupLeaseFixture(t, ctx, pool, secondOwner, secondDataset, secondJob)
+	defer func() { _, _ = pool.Exec(ctx, `DELETE FROM processing_workers WHERE worker_id = $1`, workerID) }()
+
+	start := make(chan struct{})
+	results := make(chan error, 2)
+	for _, jobID := range []uuid.UUID{firstJob, secondJob} {
+		go func(id uuid.UUID) {
+			<-start
+			_, acquireErr := repository.Acquire(ctx, AcquireCommand{JobID: id})
+			results <- acquireErr
+		}(jobID)
+	}
+	close(start)
+	succeeded, unavailable := 0, 0
+	for range 2 {
+		acquireErr := <-results
+		switch {
+		case acquireErr == nil:
+			succeeded++
+		case errors.Is(acquireErr, ErrWorkerUnavailable):
+			unavailable++
+		default:
+			t.Fatalf("unexpected concurrent acquire error: %v", acquireErr)
+		}
+	}
+	if succeeded != 1 || unavailable != 1 {
+		t.Fatalf("capacity race results succeeded=%d unavailable=%d", succeeded, unavailable)
+	}
+}
+
 func assertAcquiredLeaseOutbox(t *testing.T, ctx context.Context, pool *pgxpool.Pool, jobID, versionID uuid.UUID, lease Lease) {
 	t.Helper()
 	var messageType, exchange, routingKey string
@@ -168,7 +251,11 @@ FROM outbox_messages
 WHERE payload->>'jobId' = $1`, jobID.String()).Scan(&messageType, &exchange, &routingKey, &encodedPayload); err != nil {
 		t.Fatalf("select acquired lease outbox message: %v", err)
 	}
-	if messageType != queue.MessageJobRequested || exchange != queue.CommandsExchange || routingKey != queue.MessageJobRequested {
+	expectedRoutingKey, err := queue.WorkerRoutingKey(queue.MessageJobRequested, lease.WorkerID)
+	if err != nil {
+		t.Fatalf("WorkerRoutingKey returned error: %v", err)
+	}
+	if messageType != queue.MessageJobRequested || exchange != queue.CommandsExchange || routingKey != expectedRoutingKey {
 		t.Fatalf("unexpected acquired lease routing: type=%s exchange=%s routing=%s", messageType, exchange, routingKey)
 	}
 

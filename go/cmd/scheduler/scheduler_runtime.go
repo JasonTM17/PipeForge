@@ -16,7 +16,7 @@ import (
 	"github.com/JasonTM17/PipeForge/go/internal/queue"
 	"github.com/JasonTM17/PipeForge/go/internal/scheduler"
 	"github.com/JasonTM17/PipeForge/go/internal/storage"
-	"github.com/google/uuid"
+	"github.com/JasonTM17/PipeForge/go/internal/workerregistry"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -26,7 +26,12 @@ type schedulerRuntime struct {
 	dispatcher       *scheduler.Dispatcher
 	outboxDispatcher *outbox.Dispatcher
 	leaseRepository  *lease.Repository
+	workerRegistry   workerEventStore
 	multipartService *multipart.Service
+}
+
+type workerEventStore interface {
+	ApplyEnvelope(context.Context, queue.Envelope) error
 }
 
 func run(ctx context.Context) error {
@@ -49,9 +54,6 @@ func run(ctx context.Context) error {
 }
 
 func newSchedulerRuntime(ctx context.Context, cfg config.Config, pool *pgxpool.Pool) (*schedulerRuntime, func(), error) {
-	if cfg.DispatchWorkerID == uuid.Nil {
-		return nil, nil, fmt.Errorf("PIPEFORGE_DISPATCH_WORKER_ID is required by the scheduler")
-	}
 	if pool == nil {
 		return nil, nil, fmt.Errorf("scheduler database pool is required")
 	}
@@ -63,6 +65,11 @@ func newSchedulerRuntime(ctx context.Context, cfg config.Config, pool *pgxpool.P
 	leaseConfig.LeaseDuration = cfg.LeaseDuration
 	leaseConfig.RenewalWindow = cfg.LeaseRenewalWindow
 	leaseConfig.SweepLimit = cfg.LeaseSweepLimit
+	workerRepository, err := workerregistry.NewRepository(pool, workerregistry.Config{HeartbeatTTL: cfg.WorkerHeartbeatTTL})
+	if err != nil {
+		return nil, nil, err
+	}
+	leaseConfig.WorkerSelector = workerRepository
 	leaseRepository, err := lease.NewRepository(pool, outboxRepository, leaseConfig)
 	if err != nil {
 		return nil, nil, err
@@ -74,7 +81,7 @@ func newSchedulerRuntime(ctx context.Context, cfg config.Config, pool *pgxpool.P
 	dispatcher, err := scheduler.NewDispatcher(
 		scheduler.New(jobRepository, scheduler.Config{BatchSize: cfg.SchedulerBatchSize}),
 		leaseRepository,
-		scheduler.DispatchConfig{WorkerID: cfg.DispatchWorkerID, LeaseDuration: cfg.LeaseDuration},
+		scheduler.DispatchConfig{LeaseDuration: cfg.LeaseDuration},
 	)
 	if err != nil {
 		return nil, nil, err
@@ -110,6 +117,6 @@ func newSchedulerRuntime(ctx context.Context, cfg config.Config, pool *pgxpool.P
 	}
 	return &schedulerRuntime{
 		config: cfg, logger: slog.Default(), dispatcher: dispatcher, outboxDispatcher: outboxDispatcher,
-		leaseRepository: leaseRepository, multipartService: multipartService,
+		leaseRepository: leaseRepository, workerRegistry: workerRepository, multipartService: multipartService,
 	}, func() { _ = publisher.Close() }, nil
 }

@@ -118,25 +118,28 @@ WHERE id = $1`, item.ID, StateCancelRequested, now); err != nil {
 type cancellationTarget struct {
 	AttemptID uuid.UUID
 	LeaseID   uuid.UUID
+	WorkerID  uuid.UUID
 }
 
 func currentCancellationTarget(ctx context.Context, tx pgx.Tx, jobID uuid.UUID) (cancellationTarget, error) {
 	var target cancellationTarget
 	var attemptState string
 	var leaseID *uuid.UUID
+	var workerID *uuid.UUID
 	if err := tx.QueryRow(ctx, `
-SELECT id, lease_id, state
+SELECT id, lease_id, worker_id, state
 FROM job_attempts
 WHERE job_id = $1
 ORDER BY attempt_number DESC, id DESC
 LIMIT 1
-FOR UPDATE`, jobID).Scan(&target.AttemptID, &leaseID, &attemptState); err != nil {
+FOR UPDATE`, jobID).Scan(&target.AttemptID, &leaseID, &workerID, &attemptState); err != nil {
 		return cancellationTarget{}, fmt.Errorf("lock current job attempt for cancellation: %w", err)
 	}
-	if (attemptState != AttemptLeased && attemptState != AttemptRunning) || leaseID == nil || *leaseID == uuid.Nil {
+	if (attemptState != AttemptLeased && attemptState != AttemptRunning) || leaseID == nil || *leaseID == uuid.Nil || workerID == nil || *workerID == uuid.Nil {
 		return cancellationTarget{}, fmt.Errorf("%w: active job has no cancellable lease", ErrJobState)
 	}
 	target.LeaseID = *leaseID
+	target.WorkerID = *workerID
 	return target, nil
 }
 
@@ -191,7 +194,7 @@ WHERE id = $1`, item.ID, StateQueued, now); err != nil {
 	if err := recordHistory(ctx, tx, item.ID, item.State, StateQueued, "retry_requested", command.ActorUserID); err != nil {
 		return Job{}, err
 	}
-	if err := enqueueRequested(ctx, tx, r.outbox, item, command.TraceID, command.RequestID); err != nil {
+	if err := enqueueRetryQueued(ctx, tx, r.outbox, item, command.TraceID, command.RequestID); err != nil {
 		return Job{}, err
 	}
 	updated, err := getJobTx(ctx, tx, item.ID, false)
@@ -225,24 +228,30 @@ func enqueueCancel(ctx context.Context, tx pgx.Tx, writer outbox.Enqueuer, item 
 	if err != nil {
 		return fmt.Errorf("create cancellation envelope: %w", err)
 	}
-	return enqueueEnvelope(ctx, tx, writer, envelope)
+	routingKey, err := queue.WorkerRoutingKey(queue.MessageJobCancel, target.WorkerID)
+	if err != nil {
+		return fmt.Errorf("create cancellation routing key: %w", err)
+	}
+	return enqueueEnvelopeWithRoutingKey(ctx, tx, writer, envelope, routingKey)
 }
 
-func enqueueRequested(ctx context.Context, tx pgx.Tx, writer outbox.Enqueuer, item Job, traceID, causationID string) error {
+func enqueueRetryQueued(ctx context.Context, tx pgx.Tx, writer outbox.Enqueuer, item Job, traceID, causationID string) error {
 	traceID = valueOrDefault(traceID, item.ID.String())
-	envelope, err := queue.NewEnvelope(queue.MessageJobRequested, traceID, item.ID.String(), valueOrDefault(causationID, traceID), struct {
-		JobID            uuid.UUID   `json:"jobId"`
-		DatasetVersionID uuid.UUID   `json:"datasetVersionId"`
-		Operations       []Operation `json:"operations"`
-	}{JobID: item.ID, DatasetVersionID: item.DatasetVersionID, Operations: item.Operations})
+	envelope, err := queue.NewEnvelope(queue.MessageJobQueued, traceID, item.ID.String(), valueOrDefault(causationID, traceID), struct {
+		JobID uuid.UUID `json:"jobId"`
+	}{JobID: item.ID})
 	if err != nil {
-		return fmt.Errorf("create retry envelope: %w", err)
+		return fmt.Errorf("create retry queued envelope: %w", err)
 	}
 	return enqueueEnvelope(ctx, tx, writer, envelope)
 }
 
 func enqueueEnvelope(ctx context.Context, tx pgx.Tx, writer outbox.Enqueuer, envelope queue.Envelope) error {
-	message := outbox.Message{ID: envelope.MessageID, Envelope: envelope, Exchange: queue.CommandsExchange, RoutingKey: envelope.MessageType}
+	return enqueueEnvelopeWithRoutingKey(ctx, tx, writer, envelope, envelope.MessageType)
+}
+
+func enqueueEnvelopeWithRoutingKey(ctx context.Context, tx pgx.Tx, writer outbox.Enqueuer, envelope queue.Envelope, routingKey string) error {
+	message := outbox.Message{ID: envelope.MessageID, Envelope: envelope, Exchange: queue.CommandsExchange, RoutingKey: routingKey}
 	if err := message.Validate(); err != nil {
 		return fmt.Errorf("validate job outbox message: %w", err)
 	}

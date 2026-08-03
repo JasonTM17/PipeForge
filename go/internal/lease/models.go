@@ -17,11 +17,12 @@ const (
 )
 
 var (
-	ErrInvalidInput  = errors.New("invalid lease input")
-	ErrLeaseNotFound = errors.New("lease not found")
-	ErrLeaseExpired  = errors.New("lease has expired")
-	ErrLeaseState    = errors.New("lease is not renewable")
-	ErrLeaseNotReady = errors.New("job retry is not ready")
+	ErrInvalidInput      = errors.New("invalid lease input")
+	ErrLeaseNotFound     = errors.New("lease not found")
+	ErrLeaseExpired      = errors.New("lease has expired")
+	ErrLeaseState        = errors.New("lease is not renewable")
+	ErrLeaseNotReady     = errors.New("job retry is not ready")
+	ErrWorkerUnavailable = errors.New("no eligible worker is available")
 )
 
 type Lease struct {
@@ -37,7 +38,6 @@ type Lease struct {
 
 type AcquireCommand struct {
 	JobID    uuid.UUID
-	WorkerID uuid.UUID
 	Duration time.Duration
 }
 

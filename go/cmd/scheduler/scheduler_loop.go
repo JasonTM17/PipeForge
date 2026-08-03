@@ -11,12 +11,13 @@ import (
 
 const (
 	dispatchQueue             = "control-plane.dispatch"
+	workerEventsQueue         = "control-plane.workers"
 	queuedJobMessageType      = queue.MessageJobQueued
 	schedulerConsumerPrefetch = 8
 )
 
 func (r *schedulerRuntime) run(ctx context.Context) error {
-	if r == nil || r.dispatcher == nil || r.outboxDispatcher == nil || r.leaseRepository == nil || r.multipartService == nil {
+	if r == nil || r.dispatcher == nil || r.outboxDispatcher == nil || r.leaseRepository == nil || r.workerRegistry == nil || r.multipartService == nil {
 		return errors.New("scheduler runtime is not configured")
 	}
 	if err := r.runStartup(ctx); err != nil {
@@ -40,6 +41,10 @@ func (r *schedulerRuntime) run(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("consume scheduler queue: %w", err)
 	}
+	workerDeliveries, err := channel.Consume(workerEventsQueue, "", false, false, false, false, nil)
+	if err != nil {
+		return fmt.Errorf("consume worker events queue: %w", err)
+	}
 
 	dispatchTicker := time.NewTicker(r.config.SchedulerDispatchInterval)
 	defer dispatchTicker.Stop()
@@ -47,7 +52,7 @@ func (r *schedulerRuntime) run(ctx context.Context) error {
 	defer outboxTicker.Stop()
 	maintenanceTicker := time.NewTicker(r.config.MaintenanceInterval)
 	defer maintenanceTicker.Stop()
-	r.logger.Info("started PipeForge scheduler", "queue", dispatchQueue, "worker_id", r.config.DispatchWorkerID)
+	r.logger.Info("started PipeForge scheduler", "dispatch_queue", dispatchQueue, "worker_events_queue", workerEventsQueue, "worker_heartbeat_ttl", r.config.WorkerHeartbeatTTL)
 
 	for {
 		select {
@@ -58,6 +63,11 @@ func (r *schedulerRuntime) run(ctx context.Context) error {
 				return errors.New("scheduler delivery channel closed")
 			}
 			r.handleDelivery(ctx, delivery)
+		case delivery, ok := <-workerDeliveries:
+			if !ok {
+				return errors.New("worker events delivery channel closed")
+			}
+			r.handleWorkerDelivery(ctx, delivery)
 		case <-dispatchTicker.C:
 			r.logCycleError(ctx, "scheduler reconciliation", r.dispatchEligible)
 		case <-outboxTicker.C:

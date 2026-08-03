@@ -18,12 +18,17 @@ import (
 )
 
 type Config struct {
-	LeaseDuration time.Duration
-	RenewalWindow time.Duration
-	SweepLimit    int
-	RetryPolicy   retry.Policy
-	Clock         Clock
-	Random        retry.Source
+	LeaseDuration  time.Duration
+	RenewalWindow  time.Duration
+	SweepLimit     int
+	RetryPolicy    retry.Policy
+	Clock          Clock
+	Random         retry.Source
+	WorkerSelector WorkerSelector
+}
+
+type WorkerSelector interface {
+	SelectForLease(context.Context, pgx.Tx, []string, time.Time) (uuid.UUID, bool, error)
 }
 
 func DefaultConfig() Config {

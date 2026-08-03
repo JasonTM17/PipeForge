@@ -8,7 +8,6 @@ import (
 
 	"github.com/JasonTM17/PipeForge/go/internal/job"
 	"github.com/JasonTM17/PipeForge/go/internal/lease"
-	"github.com/google/uuid"
 )
 
 // LeaseAcquirer is the transactional boundary that allocates a worker lease
@@ -22,7 +21,6 @@ type JobSelector interface {
 }
 
 type DispatchConfig struct {
-	WorkerID      uuid.UUID
 	LeaseDuration time.Duration
 }
 
@@ -44,14 +42,14 @@ type Dispatcher struct {
 }
 
 func NewDispatcher(selector JobSelector, acquirer LeaseAcquirer, config DispatchConfig) (*Dispatcher, error) {
-	if selector == nil || acquirer == nil || config.WorkerID == uuid.Nil || config.LeaseDuration <= 0 {
-		return nil, errors.New("scheduler dispatcher requires selector, acquirer, worker ID, and lease duration")
+	if selector == nil || acquirer == nil || config.LeaseDuration <= 0 {
+		return nil, errors.New("scheduler dispatcher requires selector, acquirer, and lease duration")
 	}
 	return &Dispatcher{Selector: selector, Acquirer: acquirer, Config: config}, nil
 }
 
 func (d *Dispatcher) Dispatch(ctx context.Context) (DispatchReport, error) {
-	if d == nil || d.Selector == nil || d.Acquirer == nil || d.Config.WorkerID == uuid.Nil || d.Config.LeaseDuration <= 0 {
+	if d == nil || d.Selector == nil || d.Acquirer == nil || d.Config.LeaseDuration <= 0 {
 		return DispatchReport{}, errors.New("scheduler dispatcher is not configured")
 	}
 	queued, err := d.Selector.Select(ctx)
@@ -64,13 +62,13 @@ func (d *Dispatcher) Dispatch(ctx context.Context) (DispatchReport, error) {
 			return report, err
 		}
 		_, acquireErr := d.Acquirer.Acquire(ctx, lease.AcquireCommand{
-			JobID: item.ID, WorkerID: d.Config.WorkerID, Duration: d.Config.LeaseDuration,
+			JobID: item.ID, Duration: d.Config.LeaseDuration,
 		})
 		if acquireErr == nil {
 			report.Acquired++
 			continue
 		}
-		if errors.Is(acquireErr, lease.ErrLeaseNotReady) || errors.Is(acquireErr, job.ErrJobNotFound) || errors.Is(acquireErr, job.ErrJobState) {
+		if errors.Is(acquireErr, lease.ErrLeaseNotReady) || errors.Is(acquireErr, lease.ErrWorkerUnavailable) || errors.Is(acquireErr, job.ErrJobNotFound) || errors.Is(acquireErr, job.ErrJobState) {
 			report.Skipped++
 			continue
 		}

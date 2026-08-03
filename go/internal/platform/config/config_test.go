@@ -20,7 +20,7 @@ func TestLoadUsesDefaults(t *testing.T) {
 	if cfg.AccessTokenTTL != defaultAccessTokenTTL || cfg.RefreshTokenTTL != defaultRefreshTokenTTL || cfg.JWTSigningKey == "" {
 		t.Fatalf("unexpected identity defaults: %+v", cfg)
 	}
-	if cfg.MinIOEndpoint == "" || cfg.MinIOPublicEndpoint == "" || cfg.MinIOAccessKey == "" || cfg.MinIOSecretKey == "" || cfg.RabbitMQURL != defaultDevelopmentRabbitMQURL || cfg.DatasetBucket != defaultDatasetBucket || cfg.ArtifactBucket != defaultArtifactBucket || cfg.MaxUploadBytes != defaultMaxUploadBytes || cfg.MultipartPartSize != defaultMultipartPartSize || cfg.MultipartMaxParts != defaultMultipartMaxParts || cfg.MultipartMaxBytes != defaultMultipartMaxBytes || cfg.MultipartSessionTTL != defaultMultipartSessionTTL || cfg.MultipartURLTTL != defaultMultipartURLTTL || cfg.MultipartCompletionGrace != defaultMultipartCompletionGrace || cfg.MultipartCleanupLimit != defaultMultipartCleanupLimit || cfg.LeaseDuration != defaultLeaseDuration || cfg.LeaseRenewalWindow != defaultLeaseRenewalWindow || cfg.LeaseSweepLimit != defaultLeaseSweepLimit || cfg.DispatchWorkerID.String() != defaultDevelopmentDispatchWorkerID || cfg.SchedulerDispatchInterval != defaultSchedulerDispatchInterval || cfg.OutboxDispatchInterval != defaultOutboxDispatchInterval || cfg.MaintenanceInterval != defaultMaintenanceInterval || cfg.SchedulerBatchSize != defaultSchedulerBatchSize || cfg.OutboxBatchSize != defaultOutboxBatchSize {
+	if cfg.MinIOEndpoint == "" || cfg.MinIOPublicEndpoint == "" || cfg.MinIOAccessKey == "" || cfg.MinIOSecretKey == "" || cfg.RabbitMQURL != defaultDevelopmentRabbitMQURL || cfg.DatasetBucket != defaultDatasetBucket || cfg.ArtifactBucket != defaultArtifactBucket || cfg.MaxUploadBytes != defaultMaxUploadBytes || cfg.MultipartPartSize != defaultMultipartPartSize || cfg.MultipartMaxParts != defaultMultipartMaxParts || cfg.MultipartMaxBytes != defaultMultipartMaxBytes || cfg.MultipartSessionTTL != defaultMultipartSessionTTL || cfg.MultipartURLTTL != defaultMultipartURLTTL || cfg.MultipartCompletionGrace != defaultMultipartCompletionGrace || cfg.MultipartCleanupLimit != defaultMultipartCleanupLimit || cfg.LeaseDuration != defaultLeaseDuration || cfg.LeaseRenewalWindow != defaultLeaseRenewalWindow || cfg.LeaseSweepLimit != defaultLeaseSweepLimit || cfg.WorkerHeartbeatTTL != defaultWorkerHeartbeatTTL || cfg.SchedulerDispatchInterval != defaultSchedulerDispatchInterval || cfg.OutboxDispatchInterval != defaultOutboxDispatchInterval || cfg.MaintenanceInterval != defaultMaintenanceInterval || cfg.SchedulerBatchSize != defaultSchedulerBatchSize || cfg.OutboxBatchSize != defaultOutboxBatchSize {
 		t.Fatalf("unexpected storage defaults: %+v", cfg)
 	}
 }
@@ -55,7 +55,7 @@ func TestLoadParsesOverrides(t *testing.T) {
 		"PIPEFORGE_LEASE_DURATION":              "90s",
 		"PIPEFORGE_LEASE_RENEWAL_WINDOW":        "120s",
 		"PIPEFORGE_LEASE_SWEEP_LIMIT":           "40",
-		"PIPEFORGE_DISPATCH_WORKER_ID":          "00000000-0000-0000-0000-000000000002",
+		"PIPEFORGE_WORKER_HEARTBEAT_TTL":        "45s",
 		"PIPEFORGE_SCHEDULER_DISPATCH_INTERVAL": "3s",
 		"PIPEFORGE_OUTBOX_DISPATCH_INTERVAL":    "4s",
 		"PIPEFORGE_MAINTENANCE_INTERVAL":        "5m",
@@ -66,12 +66,12 @@ func TestLoadParsesOverrides(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Load returned error: %v", err)
 	}
-	if cfg.DatabasePort != 55433 || cfg.DatabaseMaxConns != 4 || cfg.ShutdownTimeout != 3*time.Second || cfg.AccessTokenTTL != 10*time.Minute || cfg.RefreshTokenTTL != 48*time.Hour || cfg.MinIOEndpoint != "minio:9000" || cfg.MinIOPublicEndpoint != "localhost:59010" || cfg.RabbitMQURL != "amqp://user:pass@rabbitmq:5672/" || !cfg.MinIOSecure || cfg.MinIOPublicSecure || cfg.ArtifactBucket != "custom-artifacts" || cfg.MaxUploadBytes != 1048576 || cfg.MultipartPartSize != 5242880 || cfg.MultipartMaxParts != 1000 || cfg.MultipartMaxBytes != 5242880000 || cfg.MultipartSessionTTL != 12*time.Hour || cfg.MultipartURLTTL != 10*time.Minute || cfg.MultipartCompletionGrace != 45*time.Minute || cfg.MultipartCleanupLimit != 25 || cfg.LeaseDuration != 90*time.Second || cfg.LeaseRenewalWindow != 120*time.Second || cfg.LeaseSweepLimit != 40 || cfg.DispatchWorkerID.String() != "00000000-0000-0000-0000-000000000002" || cfg.SchedulerDispatchInterval != 3*time.Second || cfg.OutboxDispatchInterval != 4*time.Second || cfg.MaintenanceInterval != 5*time.Minute || cfg.SchedulerBatchSize != 7 || cfg.OutboxBatchSize != 8 {
+	if cfg.DatabasePort != 55433 || cfg.DatabaseMaxConns != 4 || cfg.ShutdownTimeout != 3*time.Second || cfg.AccessTokenTTL != 10*time.Minute || cfg.RefreshTokenTTL != 48*time.Hour || cfg.MinIOEndpoint != "minio:9000" || cfg.MinIOPublicEndpoint != "localhost:59010" || cfg.RabbitMQURL != "amqp://user:pass@rabbitmq:5672/" || !cfg.MinIOSecure || cfg.MinIOPublicSecure || cfg.ArtifactBucket != "custom-artifacts" || cfg.MaxUploadBytes != 1048576 || cfg.MultipartPartSize != 5242880 || cfg.MultipartMaxParts != 1000 || cfg.MultipartMaxBytes != 5242880000 || cfg.MultipartSessionTTL != 12*time.Hour || cfg.MultipartURLTTL != 10*time.Minute || cfg.MultipartCompletionGrace != 45*time.Minute || cfg.MultipartCleanupLimit != 25 || cfg.LeaseDuration != 90*time.Second || cfg.LeaseRenewalWindow != 120*time.Second || cfg.LeaseSweepLimit != 40 || cfg.WorkerHeartbeatTTL != 45*time.Second || cfg.SchedulerDispatchInterval != 3*time.Second || cfg.OutboxDispatchInterval != 4*time.Second || cfg.MaintenanceInterval != 5*time.Minute || cfg.SchedulerBatchSize != 7 || cfg.OutboxBatchSize != 8 {
 		t.Fatalf("unexpected overrides: %+v", cfg)
 	}
 }
 
-func TestLoadLeavesDispatchWorkerUnsetOutsideDevelopmentForNonSchedulerProcesses(t *testing.T) {
+func TestLoadUsesWorkerHeartbeatTTLOutsideDevelopment(t *testing.T) {
 	values := map[string]string{
 		"PIPEFORGE_ENV":         "production",
 		"JWT_SIGNING_KEY":       "production-signing-key-with-32-bytes!!",
@@ -86,8 +86,8 @@ func TestLoadLeavesDispatchWorkerUnsetOutsideDevelopmentForNonSchedulerProcesses
 	if err != nil {
 		t.Fatalf("Load returned error: %v", err)
 	}
-	if cfg.DispatchWorkerID.String() != "00000000-0000-0000-0000-000000000000" {
-		t.Fatalf("non-scheduler configuration unexpectedly assigned a worker: %s", cfg.DispatchWorkerID)
+	if cfg.WorkerHeartbeatTTL != defaultWorkerHeartbeatTTL {
+		t.Fatalf("unexpected worker heartbeat TTL: %s", cfg.WorkerHeartbeatTTL)
 	}
 }
 
@@ -105,12 +105,11 @@ func TestLoadRejectsShortJWTSigningKey(t *testing.T) {
 
 func TestLoadRequiresMinIOEndpointOutsideDevelopment(t *testing.T) {
 	values := map[string]string{
-		"PIPEFORGE_ENV":                "production",
-		"JWT_SIGNING_KEY":              "production-signing-key-with-32-bytes!!",
-		"PIPEFORGE_DISPATCH_WORKER_ID": "00000000-0000-0000-0000-000000000002",
-		"MINIO_ACCESS_KEY":             "access",
-		"MINIO_SECRET_KEY":             "secret",
-		"MINIO_DATASET_BUCKET":         "datasets",
+		"PIPEFORGE_ENV":        "production",
+		"JWT_SIGNING_KEY":      "production-signing-key-with-32-bytes!!",
+		"MINIO_ACCESS_KEY":     "access",
+		"MINIO_SECRET_KEY":     "secret",
+		"MINIO_DATASET_BUCKET": "datasets",
 	}
 	_, err := Load(func(key string) string { return values[key] })
 	if err == nil || !strings.Contains(err.Error(), "MINIO_ENDPOINT") {

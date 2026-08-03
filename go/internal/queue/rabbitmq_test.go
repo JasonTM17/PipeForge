@@ -8,7 +8,7 @@ import (
 
 func TestDefaultTopologyMatchesContract(t *testing.T) {
 	topology := DefaultTopology()
-	if len(topology.Exchanges) != 3 || len(topology.Queues) != 10 || len(topology.Bindings) != 15 {
+	if len(topology.Exchanges) != 3 || len(topology.Queues) != 12 || len(topology.Bindings) != 18 {
 		t.Fatalf("unexpected topology counts: %+v", topology)
 	}
 	if topology.Queues[0].DeadLetter != "processing.jobs.dlq" {
@@ -19,6 +19,11 @@ func TestDefaultTopologyMatchesContract(t *testing.T) {
 	}
 	if !containsBinding(topology, CommandsExchange, "control-plane.dispatch", MessageJobQueued) {
 		t.Fatalf("queued signal is not bound to the dispatch queue: %+v", topology.Bindings)
+	}
+	if !containsQueue(topology, "control-plane.workers", "control-plane.workers.dlq") ||
+		!containsBinding(topology, EventsExchange, "control-plane.workers", MessageWorkerRegistered) ||
+		!containsBinding(topology, EventsExchange, "control-plane.workers", MessageWorkerHeartbeat) {
+		t.Fatalf("worker registry events are not durably routed: %+v", topology)
 	}
 	for _, messageType := range []string{MessageJobStarted, MessageJobProgressed, MessageJobSucceeded, MessageJobFailed, MessageJobCancelled, MessageArtifactCreated} {
 		if !containsBinding(topology, EventsExchange, "control-plane.results", messageType) {

@@ -32,9 +32,9 @@ func (a *acquirerStub) Acquire(_ context.Context, command lease.AcquireCommand) 
 }
 
 func TestDispatcherAcquiresEachFairlySelectedJob(t *testing.T) {
-	workerID, firstJobID, secondJobID := uuid.New(), uuid.New(), uuid.New()
+	firstJobID, secondJobID := uuid.New(), uuid.New()
 	acquirer := &acquirerStub{}
-	dispatcher, err := NewDispatcher(selectorStub{items: []job.QueuedJob{{Job: job.Job{ID: firstJobID}}, {Job: job.Job{ID: secondJobID}}}}, acquirer, DispatchConfig{WorkerID: workerID, LeaseDuration: time.Minute})
+	dispatcher, err := NewDispatcher(selectorStub{items: []job.QueuedJob{{Job: job.Job{ID: firstJobID}}, {Job: job.Job{ID: secondJobID}}}}, acquirer, DispatchConfig{LeaseDuration: time.Minute})
 	if err != nil {
 		t.Fatalf("NewDispatcher returned error: %v", err)
 	}
@@ -50,16 +50,16 @@ func TestDispatcherAcquiresEachFairlySelectedJob(t *testing.T) {
 		t.Fatalf("unexpected acquired jobs: %+v", acquirer.commands)
 	}
 	for _, command := range acquirer.commands {
-		if command.WorkerID != workerID || command.Duration != time.Minute {
-			t.Fatalf("dispatcher did not preserve configured lease fence: %+v", command)
+		if command.Duration != time.Minute {
+			t.Fatalf("dispatcher did not preserve configured lease duration: %+v", command)
 		}
 	}
 }
 
 func TestDispatcherTreatsDuplicateOrNotReadyJobsAsSafeSkips(t *testing.T) {
-	workerID, firstJobID, secondJobID := uuid.New(), uuid.New(), uuid.New()
+	firstJobID, secondJobID := uuid.New(), uuid.New()
 	acquirer := &acquirerStub{errors: map[uuid.UUID]error{firstJobID: job.ErrJobState, secondJobID: lease.ErrLeaseNotReady}}
-	dispatcher, err := NewDispatcher(selectorStub{items: []job.QueuedJob{{Job: job.Job{ID: firstJobID}}, {Job: job.Job{ID: secondJobID}}}}, acquirer, DispatchConfig{WorkerID: workerID, LeaseDuration: time.Minute})
+	dispatcher, err := NewDispatcher(selectorStub{items: []job.QueuedJob{{Job: job.Job{ID: firstJobID}}, {Job: job.Job{ID: secondJobID}}}}, acquirer, DispatchConfig{LeaseDuration: time.Minute})
 	if err != nil {
 		t.Fatalf("NewDispatcher returned error: %v", err)
 	}
@@ -76,7 +76,7 @@ func TestDispatcherTreatsDuplicateOrNotReadyJobsAsSafeSkips(t *testing.T) {
 func TestDispatcherReportsIndividualAcquisitionFailureAndContinues(t *testing.T) {
 	firstJobID, secondJobID := uuid.New(), uuid.New()
 	acquirer := &acquirerStub{errors: map[uuid.UUID]error{firstJobID: errors.New("database unavailable")}}
-	dispatcher, err := NewDispatcher(selectorStub{items: []job.QueuedJob{{Job: job.Job{ID: firstJobID}}, {Job: job.Job{ID: secondJobID}}}}, acquirer, DispatchConfig{WorkerID: uuid.New(), LeaseDuration: time.Minute})
+	dispatcher, err := NewDispatcher(selectorStub{items: []job.QueuedJob{{Job: job.Job{ID: firstJobID}}, {Job: job.Job{ID: secondJobID}}}}, acquirer, DispatchConfig{LeaseDuration: time.Minute})
 	if err != nil {
 		t.Fatalf("NewDispatcher returned error: %v", err)
 	}

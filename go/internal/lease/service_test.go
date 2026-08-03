@@ -26,7 +26,7 @@ func TestServiceDelegatesValidatedLeaseCommands(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewService returned error: %v", err)
 	}
-	if _, err := service.Acquire(context.Background(), AcquireCommand{JobID: uuid.New(), WorkerID: uuid.New()}); err != nil {
+	if _, err := service.Acquire(context.Background(), AcquireCommand{JobID: uuid.New()}); err != nil {
 		t.Fatalf("Acquire returned error: %v", err)
 	}
 	if _, err := service.Renew(context.Background(), RenewCommand{LeaseID: uuid.New(), WorkerID: uuid.New()}); err != nil {
