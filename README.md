@@ -101,6 +101,22 @@ Get-Content plans/20260801-1300-pipeforge-platform/plan.md
 
 The repository CI mirrors the local quality gates: Go format/test/race/vet, Python lint/format/type/test, contract validation, Compose configuration, console build, and whitespace checks. The complete validation evidence and known limits are recorded in [the release package](docs/release/README.md).
 
+## Published containers
+
+The `0.2.1-local` release publishes role-specific, non-root images for
+`linux/amd64` and `linux/arm64` to both GHCR and Docker Hub. For example:
+
+```text
+docker pull ghcr.io/jasontm17/pipeforge-api:0.2.1-local
+docker pull nguyenson1710/pipeforge-worker:0.2.1-local
+```
+
+Available image suffixes are `api`, `scheduler`, `result-consumer`, `migrate`,
+and `worker`. Production automation should pin the immutable digest recorded by
+the release workflow instead of relying on a mutable version tag. See the
+[container publication guide](docs/operations/container-publication.md) for
+the complete matrix, verification commands, and release policy.
+
 ![PipeForge system architecture](docs/assets/images/system-architecture.png)
 
 ![PipeForge job lifecycle](docs/assets/images/job-lifecycle.png)
