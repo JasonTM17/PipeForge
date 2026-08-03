@@ -1,6 +1,6 @@
 {
   "name": "pipeforge",
-  "version": "0.2.0-local",
+  "version": "0.2.2-local",
   "releaseKind": "verified-learning-repository",
   "sourceCommit": "ddf4347",
   "runtime": {
@@ -13,8 +13,9 @@
     "composeE2E": "single-worker SUCCEEDED with three artifacts and HTTP 200 download; two-worker run distributed four jobs and cancelled a real active job",
     "contracts": "15 schemas, 14 valid examples, 5 invalid examples",
     "pythonTests": 74,
-    "consoleBuild": "passed",
-    "githubActionsRun": "30799562214 (all five CI jobs passed); 30799562229 (all three CodeQL jobs passed)"
+    "console": "10 unit tests passed; 97.95% line coverage; 4 desktop/mobile Chromium flows passed with axe",
+    "containerRelease": "30809299824 (prepare plus five publish jobs passed)",
+    "githubActionsRun": "30799562214 (all five baseline CI jobs passed); 30799562229 (all three CodeQL jobs passed)"
   },
   "assets": {
     "architecture": "docs/assets/images/system-architecture.svg + .png",

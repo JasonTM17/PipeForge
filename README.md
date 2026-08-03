@@ -99,7 +99,12 @@ git status --short
 Get-Content plans/20260801-1300-pipeforge-platform/plan.md
 ```
 
-The repository CI mirrors the local quality gates: Go format/test/race/vet, Python lint/format/type/test, contract validation, Compose configuration, console build, and whitespace checks. The complete validation evidence and known limits are recorded in [the release package](docs/release/README.md).
+The repository CI mirrors the local quality gates: Go format/test/race/vet,
+real PostgreSQL/RabbitMQ integration tests, Python lint/format/type/test,
+contract and documentation validation, Compose configuration, console unit
+coverage and desktop/mobile browser accessibility tests, a production console
+build, and a full multi-worker Compose E2E flow. The complete validation
+evidence and known limits are recorded in [the release package](docs/release/README.md).
 
 ## Published containers
 
@@ -125,7 +130,14 @@ The real local demonstration is captured as a compact [E2E flow GIF](docs/assets
 
 ## Operator console
 
-The optional console is a thin, API-backed learning surface. It stores an access token only in browser session storage, never receives MinIO credentials, and renders live owner-scoped datasets, jobs, progress, and artifacts. Run it with `npm install && npm run dev` from `frontend/`, then point it at the local API when prompted.
+The optional console is a thin, API-backed learning surface. It stores an access token only in browser session storage, never receives MinIO credentials, and renders live owner-scoped datasets, jobs, progress, and artifacts. It cancels superseded requests, clears expired sessions, preserves selected jobs in the URL, and exposes loading/error/empty states to assistive technology. Run it from `frontend/`:
+
+```text
+npm ci
+npm test
+npm run test:browser
+npm run dev
+```
 
 The companion `pipectl` exercises the same public API without touching
 PostgreSQL, RabbitMQ, or MinIO directly:
@@ -144,6 +156,9 @@ The token is stored in the ignored `.pipeforge-token` file, or supplied through
 CI, CodeQL, dependency automation, secret scanning, and protected-branch
 policy are documented in
 [repository security gates](./docs/security/repository-gates.md).
+The [threat model](./docs/security/threat-model.md) and
+[secure configuration guide](./docs/security/secure-configuration.md) map the
+implemented controls and remaining deployment risks.
 
 ## Engineering rules
 

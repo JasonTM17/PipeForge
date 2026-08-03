@@ -3,7 +3,7 @@ title: PipeForge runtime delivery completion
 description: >-
   Turn the existing control-plane and data-plane slices into a verified local
   end-to-end learning product with an auditable release package.
-status: in-progress
+status: completed
 priority: P1
 branch: main
 tags:

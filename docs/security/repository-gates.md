@@ -11,9 +11,15 @@ Required checks:
 - `Python checks`
 - `Contract and repository checks`
 - `Console build`
+- `Compose end-to-end checks`
 - `Analyze (go)`
 - `Analyze (python)`
 - `Analyze (javascript-typescript)`
+
+`Console build` includes a production-dependency audit, unit coverage gate,
+desktop/mobile Chromium flows, axe accessibility scan, and production build.
+`Compose end-to-end checks` builds the stack and proves upload, processing,
+artifact download, two-worker assignment, targeted routing, and cancellation.
 
 CodeQL scans Go, Python, and JavaScript/TypeScript. Dependency review rejects
 new moderate-or-higher vulnerable dependencies in pull requests. Dependabot

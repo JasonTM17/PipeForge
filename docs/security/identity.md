@@ -28,9 +28,19 @@ Current scopes are `datasets:read`, `datasets:write`, `jobs:read`, `jobs:write`,
 - API-key management requires a valid bearer token or API key and enforces owner boundaries.
 - Dataset routes require `datasets:read` or `datasets:write`; non-admin principals can access only their own datasets. Raw object keys are omitted from public version responses.
 - Authentication failures use a stable `UNAUTHENTICATED` problem response with a request ID. Credential values and internal errors are not returned.
+- Registration, login, and refresh use a process-local token bucket keyed by
+  the TCP peer IP. Forwarded headers are not trusted by default. Exhaustion
+  returns `429 RATE_LIMITED` with `Retry-After`; memory is bounded by a maximum
+  client count and idle-entry TTL.
 
 ## Operational requirements
 
 Set `JWT_SIGNING_KEY` to a random value of at least 32 bytes outside local development. Configure `PIPEFORGE_ACCESS_TOKEN_TTL` and `PIPEFORGE_REFRESH_TOKEN_TTL` through the validated environment. Apply migrations with `make migrate` before enabling the API against a fresh database.
 
-Rate limiting and broader quota enforcement remain in the security/quotas phase; the identity handlers already bound JSON request bodies and reject unknown fields.
+Configure auth throttling with `PIPEFORGE_AUTH_RATE_LIMIT_PER_MINUTE`,
+`PIPEFORGE_AUTH_RATE_LIMIT_BURST`, `PIPEFORGE_AUTH_RATE_LIMIT_MAX_CLIENTS`, and
+`PIPEFORGE_AUTH_RATE_LIMIT_ENTRY_TTL`. The limiter is intentionally
+process-local for the single-node learning deployment. A multi-replica
+deployment must provide a trusted proxy policy and shared limiter before it
+can claim globally consistent enforcement. Job admission separately enforces
+the owner-scoped queued-job quota in PostgreSQL.
