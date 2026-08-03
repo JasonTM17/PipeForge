@@ -22,7 +22,7 @@ routed only to that worker. Add practical GitHub security gates and protect
 |---|---|---|
 | 1 | [Worker registry and atomic selection](./phase-01-worker-registry-and-selection.md) | Completed |
 | 2 | [Worker-targeted command routing](./phase-02-worker-targeted-routing.md) | Completed |
-| 3 | [Security CI and repository policy](./phase-03-security-ci-and-repository-policy.md) | In progress |
+| 3 | [Security CI and repository policy](./phase-03-security-ci-and-repository-policy.md) | Completed |
 | 4 | [Verification, docs, and release evidence](./phase-04-verification-docs-and-release.md) | In progress |
 
 ## Acceptance criteria

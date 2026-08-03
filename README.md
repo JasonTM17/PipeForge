@@ -123,6 +123,12 @@ go run ./go/cmd/pipectl jobs
 The token is stored in the ignored `.pipeforge-token` file, or supplied through
 `PIPEFORGE_TOKEN`/`PIPEFORGE_TOKEN_FILE`.
 
+## Repository security
+
+CI, CodeQL, dependency automation, secret scanning, and protected-branch
+policy are documented in
+[repository security gates](./docs/security/repository-gates.md).
+
 ## Engineering rules
 
 - Use explicit Conventional Commits, grouped by one logical behavior.

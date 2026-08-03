@@ -1,20 +1,20 @@
 {
   "name": "pipeforge",
-  "version": "0.1.0-local",
+  "version": "0.2.0-local",
   "releaseKind": "verified-learning-repository",
-  "sourceCommit": "fb9e96a",
+  "sourceCommit": "ddf4347",
   "runtime": {
-    "go": "1.23",
+    "go": "1.25",
     "python": ">=3.12,<3.15",
     "node": "22+ for the console",
-    "services": ["postgresql", "rabbitmq", "minio", "go-api", "go-scheduler", "go-result-consumer", "python-worker"]
+    "services": ["postgresql", "rabbitmq", "minio", "go-api", "go-scheduler", "go-result-consumer", "python-worker", "secondary-python-worker"]
   },
   "validation": {
-    "composeE2E": "SUCCEEDED with three canonical artifacts and HTTP 200 download",
+    "composeE2E": "single-worker SUCCEEDED with three artifacts and HTTP 200 download; two-worker run distributed four jobs and cancelled a real active job",
     "contracts": "15 schemas, 14 valid examples, 5 invalid examples",
-    "pythonTests": 60,
+    "pythonTests": 74,
     "consoleBuild": "passed",
-    "githubActionsRun": "30790719107 (all four jobs passed)"
+    "githubActionsRun": "30799562214 (all five CI jobs passed); 30799562229 (all three CodeQL jobs passed)"
   },
   "assets": {
     "architecture": "docs/assets/images/system-architecture.svg + .png",

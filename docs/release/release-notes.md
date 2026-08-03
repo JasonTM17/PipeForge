@@ -15,6 +15,10 @@
 - `make e2e` provides a disposable API-to-artifact demonstration.
 - CI covers Go, Python, contracts, Compose configuration, and the frontend
   build.
+- CodeQL, dependency review, Dependabot, secret push protection, and strict
+  protected-`main` checks now guard repository changes.
+- Vulnerable Go dependencies were upgraded and Dependabot security alerts were
+  cleared at the verified source revision.
 - `pipectl` provides safe API-only login, upload, job, dataset, artifact, and
   cancellation commands with a local ignored token file.
 - Repository now includes architecture/lifecycle diagrams, an E2E GIF, a
