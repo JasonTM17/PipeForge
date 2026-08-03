@@ -1,7 +1,15 @@
 # Known limitations
 
-- The scheduler uses one configured learning-mode worker identity. Dynamic
-  worker assignment and fairness across multiple workers are not implemented.
+- Worker selection covers heartbeat liveness, operation capabilities, and
+  lease capacity. It does not provide autoscaling, locality-aware placement,
+  multi-region failover, or cluster-wide SLOs.
+- Legacy shared queues remain declared for upgrade compatibility but have no
+  consumer by default. A migration operator may temporarily enable one
+  designated consumer to drain known-compatible old messages.
+- Worker UUIDs are routing identities and must be unique across concurrently
+  running processes. Use a new UUID for an overlapping rollout, or stop the old
+  instance before reusing its UUID; instance IDs fence registry heartbeats but
+  are not part of the version-1 job-command route.
 - Compose defaults are intentionally local and use development credentials from
   `.env.example`; rotate every value before any shared environment.
 - The local object store, database, and broker have no production backup,

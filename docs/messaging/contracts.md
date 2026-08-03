@@ -15,7 +15,7 @@ Go publishers reject unknown message types, missing envelope fields, invalid pay
 
 The control-plane cancellation representation may omit attempt/lease identity when cancellation is resolved before a lease is assigned; that path is finalized in PostgreSQL and is not sent to a worker. Every command delivered to the worker cancellation queue carries both opaque `attemptId` and `leaseId`; the worker rejects unfenced commands and records accepted requests only for that exact identity, so a delayed cancellation cannot stop a later retry. Progress events carry the same identity and are accepted only when their timestamp and row/percentage values do not regress the current snapshot.
 
-Job creation publishes a durable `processing.job.queued` signal with only `jobId`; it is consumed by the control-plane dispatcher and is never delivered to a worker. The dispatcher alone emits `processing.job.requested` after atomically acquiring a valid lease. That executable command is lease-fenced and requires `attemptId`, `leaseId`, `workerId`, `attemptNumber`, operations, and server-resolved immutable source metadata (`objectKey`, `contentType`, `format`, and `sizeBytes`). It does not carry `originalFilename`, storage credentials, or raw dataset data.
+Job creation and explicit retry publish a durable `processing.job.queued` signal with only `jobId`; it is consumed by the control-plane dispatcher and is never delivered to a worker. The dispatcher alone emits `processing.job.requested` after atomically acquiring a valid lease and eligible worker. That executable command is routed as `processing.job.requested.<workerId>`, is lease-fenced, and requires `attemptId`, `leaseId`, `workerId`, `attemptNumber`, operations, and server-resolved immutable source metadata (`objectKey`, `contentType`, `format`, and `sizeBytes`). It does not carry `originalFilename`, storage credentials, or raw dataset data.
 
 The result queue receives only job lifecycle outcomes (`started`, `progressed`, `succeeded`, `failed`, and `cancelled`) plus `processing.artifact.created`. Worker registration and heartbeat events are not result events and must never be dead-lettered by the result consumer.
 
@@ -26,14 +26,14 @@ The `processing.job.requested` payload accepts the operation types implemented b
 | Type | Direction | Exchange/routing key | Purpose |
 | --- | --- | --- | --- |
 | `processing.job.queued` | Go → control-plane dispatcher | `pipeforge.commands` / same key | Durable, non-executable scheduler signal carrying only `jobId`. |
-| `processing.job.requested` | Go → worker | `pipeforge.commands` / same key | Start a lease-fenced, idempotent job attempt. |
-| `processing.job.cancel-requested` | Go → worker | `pipeforge.commands` / same key | Ask a worker to stop between bounded stages. |
+| `processing.job.requested` | Go → selected worker | `pipeforge.commands` / `<type>.<workerId>` | Start a lease-fenced, idempotent job attempt. |
+| `processing.job.cancel-requested` | Go → lease owner | `pipeforge.commands` / `<type>.<workerId>` | Ask the assigned worker to stop between bounded stages. |
 | `processing.job.started` | worker → Go | `pipeforge.events` / same key | Report the validated attempt and lease. |
 | `processing.job.progressed` | worker → Go | `pipeforge.events` / same key | Publish throttled progress snapshots. |
 | `processing.job.succeeded` | worker → Go | `pipeforge.events` / same key | Publish accepted attempt artifact references. |
 | `processing.job.failed` | worker → Go | `pipeforge.events` / same key | Publish classified retryable/permanent failure. |
-| `processing.worker.registered` | worker → Go | `pipeforge.events` / same key | Register worker capabilities. |
-| `processing.worker.heartbeat` | worker → Go | `pipeforge.events` / same key | Refresh worker liveness and capacity. |
+| `processing.worker.registered` | worker → scheduler registry | `pipeforge.events` / same key | Register a worker instance and capabilities. |
+| `processing.worker.heartbeat` | worker → scheduler registry | `pipeforge.events` / same key | Refresh lifecycle status, liveness, and observed capacity. |
 | `processing.artifact.created` | worker → Go | `pipeforge.events` / same key | Announce an attempt-scoped object after upload. |
 
 ## Compatibility rules

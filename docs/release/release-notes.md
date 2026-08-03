@@ -1,8 +1,12 @@
-# Release notes — 0.1.0-local
+# Release notes — 0.2.0-local
 
 ## Highlights
 
 - Lease-bound scheduler dispatches a server-resolved, schema-validated command.
+- Scheduler persists worker registrations/heartbeats and selects a fresh,
+  capable worker with available authoritative lease capacity.
+- Executable and cancellation commands use worker-targeted queues; a real
+  four-job Compose check proves distribution across two worker identities.
 - Python worker executes real CSV processing and publishes profile, quality,
   and anomaly artifacts into an artifact bucket.
 - Result consumer enforces inbox idempotency, attempt fencing, and canonical
@@ -19,5 +23,5 @@
 ## Not included
 
 This release does not include cloud deployment, production credentials,
-multi-region availability, an operational SLA, or a selected open-source
-license.
+autoscaling, multi-region availability, an operational SLA, or a selected
+open-source license.

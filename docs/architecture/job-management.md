@@ -1,6 +1,6 @@
 # Job management
 
-The Go control plane owns processing jobs. A request is authorized against the dataset owner and an `AVAILABLE` dataset version before PostgreSQL creates the job, first attempt, transition history, idempotency record, quota counter, and `processing.job.requested` outbox row in one transaction.
+The Go control plane owns processing jobs. A request is authorized against the dataset owner and an `AVAILABLE` dataset version before PostgreSQL creates the job, first attempt, transition history, idempotency record, quota counter, and job-only `processing.job.queued` outbox row in one transaction.
 
 ## Public lifecycle
 
@@ -30,7 +30,7 @@ There is no arbitrary status-update endpoint. Every transition is checked agains
 - `GET /api/v1/jobs` returns an owner-filtered page; administrators can see all owners.
 - `GET /api/v1/jobs/{jobID}` returns a safe job projection without object-storage credentials or internal stack traces.
 - `POST /api/v1/jobs/{jobID}/cancel` cancels queued work immediately or requests active cancellation and publishes `processing.job.cancel-requested` through the outbox. Active commands carry the current attempt and lease identity.
-- `POST /api/v1/jobs/{jobID}/retry` re-queues an eligible failed/dead-lettered job and publishes a fresh request command.
+- `POST /api/v1/jobs/{jobID}/retry` re-queues an eligible failed/dead-lettered job and publishes a fresh scheduler signal; only a later lease acquisition emits an executable request.
 
 Operation types are allowlisted: `PROFILE_DATASET`, `CHECK_MISSING_VALUES`, `CHECK_DUPLICATES`, `VALIDATE_QUALITY`, and `DETECT_OUTLIERS`. Column identifiers are restricted to safe identifier syntax, operation count is capped at 32, and request bodies are capped at 64 KiB. Fingerprints use canonical JSON, so object-key ordering cannot bypass idempotency conflict detection. Outlier detection supports IQR, Z-score, and modified Z-score with explicit finite-number, null-policy, sample-size, and reference bounds.
 
@@ -43,17 +43,21 @@ sequenceDiagram
     participant PG as PostgreSQL
     participant Outbox as Outbox publisher
     participant MQ as RabbitMQ
-    participant Worker as Python worker
+    participant Scheduler
+    participant Worker as Selected Python worker
 
     Client->>API: create job + Idempotency-Key
     API->>PG: lock dataset/version and validate owner/state
     API->>PG: job + attempt + history + idempotency + quota
-    API->>PG: outbox processing.job.requested
+    API->>PG: outbox processing.job.queued
     PG-->>API: commit
     API-->>Client: 201 Job
     Outbox->>PG: claim with lease
     Outbox->>MQ: publisher-confirmed persistent message
-    MQ-->>Worker: job request
+    MQ-->>Scheduler: job-only queued signal
+    Scheduler->>PG: lock job + eligible worker, create lease + outbox
+    Outbox->>MQ: processing.job.requested.<workerId>
+    MQ-->>Worker: fenced job request
 ```
 
 RabbitMQ is never contacted inside the job transaction. If outbox insertion fails, no job or quota mutation remains. If publishing is retried, the message ID and consumer idempotency rules prevent an at-least-once delivery from becoming an unbounded state mutation.
@@ -62,6 +66,6 @@ When a worker result arrives, the result consumer applies the job transition onl
 
 ## Fair selection
 
-The scheduler reads a bounded candidate window with `FOR UPDATE SKIP LOCKED`; candidates are grouped by owner and selected in round-robin passes. Priority and age order jobs within an owner, while the round-robin boundary prevents one owner with a large backlog from consuming the entire batch. The lease repository owns row-locked acquisition, worker-scoped renewal, and expiry recovery; the scheduler process runs the expiry sweep on its configured interval.
+The scheduler reads a bounded candidate window with `FOR UPDATE SKIP LOCKED`; candidates are grouped by owner and selected in round-robin passes. Priority and age order jobs within an owner, while the round-robin boundary prevents one owner with a large backlog from consuming the entire batch. Lease acquisition also locks a fresh, capable worker with available active-attempt capacity and publishes to that worker's UUID-suffixed route. The lease repository owns worker-scoped renewal and expiry recovery; the scheduler process runs the expiry sweep on its configured interval.
 
 The initial per-owner admission bound is 100 queued jobs. Cancellation decrements the queued counter transactionally; retry admission increments it again only if capacity remains.

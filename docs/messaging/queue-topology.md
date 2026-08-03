@@ -4,19 +4,22 @@ RabbitMQ is used for durable at-least-once commands and events. The canonical de
 
 ```mermaid
 flowchart LR
-    Commands["pipeforge.commands\ntopic exchange"] --> Jobs["processing.jobs\nmanual ack"]
-    Commands --> Cancels["processing.cancellations\nmanual ack"]
+    Commands["pipeforge.commands\ntopic exchange"] --> Jobs["processing.jobs.&lt;worker-uuid&gt;\nmanual ack"]
+    Commands --> Cancels["processing.cancellations.&lt;worker-uuid&gt;\nmanual ack"]
     Commands --> Dispatch["control-plane.dispatch\nprocessing.job.queued\nmanual ack"]
-    Events["pipeforge.events\ntopic exchange"] --> Results["control-plane.results\nstarted/progressed/succeeded/failed/cancelled + artifact.created\nmanual ack"]
+    Events["pipeforge.events\ntopic exchange"] --> Workers["control-plane.workers\nregistration + heartbeat\nmanual ack"]
+    Events --> Results["control-plane.results\nstarted/progressed/succeeded/failed/cancelled + artifact.created\nmanual ack"]
     Events --> Audit["audit.events"]
     Events --> Monitoring["monitoring.events"]
     Jobs -->|bounded reject| DLQ["pipeforge.dead-letter\ntopic exchange"]
     Cancels -->|bounded reject| DLQ
     Dispatch -->|bounded reject| DLQ
+    Workers -->|bounded reject| DLQ
     Results -->|bounded reject| DLQ
     DLQ --> JobsDLQ["processing.jobs.dlq"]
     DLQ --> CancelsDLQ["processing.cancellations.dlq"]
     DLQ --> DispatchDLQ["control-plane.dispatch.dlq"]
+    DLQ --> WorkersDLQ["control-plane.workers.dlq"]
     DLQ --> ResultsDLQ["control-plane.results.dlq"]
 ```
 
@@ -29,5 +32,13 @@ flowchart LR
 - Trace, correlation, causation, message ID, and schema version are copied into AMQP properties/headers.
 - Queue payloads contain no credentials or raw dataset records.
 - `processing.job.queued` is routed only to `control-plane.dispatch`; it is a job-only scheduler signal, not a worker command.
+- Executable commands use `processing.job.requested.<worker-uuid>` and active
+  cancellations use `processing.job.cancel-requested.<worker-uuid>`. Each
+  worker declares durable UUID-suffixed queues bound only to its own keys.
+- `control-plane.workers` receives registration and heartbeat events. It is
+  separate from `control-plane.results`, so lifecycle consumers never reject
+  valid worker-presence events.
+- Unsuffixed job/cancellation queues exist only for a one-worker compatibility
+  cutover and must not have multiple consumers.
 
 The initial local topology uses the development credentials from `.env`; production deployments must provide separate least-privilege credentials and TLS-ready broker URLs.

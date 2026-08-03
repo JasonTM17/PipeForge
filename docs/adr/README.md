@@ -12,4 +12,4 @@ These records capture decisions that affect service boundaries, delivery guarant
 - [ADR-008: At-least-once delivery](ADR-008-at-least-once-delivery.md)
 - [ADR-009: Polars dataframe engine](ADR-009-polars-dataframe-engine.md)
 - [ADR-010: Monorepo structure](ADR-010-monorepo-structure.md)
-
+- [ADR-011: Capability-aware worker routing](ADR-011-capability-aware-worker-routing.md)

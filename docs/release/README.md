@@ -1,10 +1,10 @@
 # PipeForge local learning release
 
-Version: `0.1.0-local`
+Version: `0.2.0-local`
 
 This folder is the release evidence for the verified local runtime. It is not
-a production certification and does not claim cloud availability, multi-worker
-fair scheduling, or a finalized license.
+a production certification and does not claim cloud availability, autoscaling,
+multi-region scheduling, or a finalized license.
 
 ## Included evidence
 

@@ -2,7 +2,7 @@
 
 PipeForge is a production-oriented distributed data-processing platform for uploading datasets, scheduling analysis jobs, processing data with Python workers, and accepting results through a reliable Go control plane.
 
-> Status: The local runtime path is verified end to end: upload → queued job → lease-bound dispatch → Python processing → canonical artifacts → authorized download. This is a serious learning repository with production-oriented boundaries, not a production deployment. Cloud HA, multi-worker scheduling, and a selected license remain intentionally out of scope.
+> Status: The local runtime path is verified end to end: upload → capability-aware multi-worker scheduling → lease-bound dispatch → Python processing → canonical artifacts → authorized download. This is a serious learning repository with production-oriented boundaries, not a production deployment. Cloud HA and a selected license remain intentionally out of scope.
 
 ## Architecture
 
@@ -35,7 +35,7 @@ plans/          Persistent implementation plan and phase reports
 The local environment requires:
 
 - Docker Engine with Compose v2
-- Go 1.23 (the module and build image are pinned to the Go 1.23 toolchain line)
+- Go 1.25 (the module and build image are pinned to the Go 1.25 toolchain line)
 - Python 3.12+ with a virtual environment
 - GNU Make or the documented PowerShell equivalents
 
@@ -72,6 +72,24 @@ make e2e
 
 It creates a throwaway account and dataset, uploads a CSV, runs profile/missing-value/outlier operations, waits for `SUCCEEDED`, verifies three canonical artifacts, and downloads one artifact. It prints IDs and status only; it does not print tokens, presigned URLs, or dataset rows.
 
+To start the optional second worker and prove real distribution across two
+worker identities:
+
+```powershell
+make multi-worker-e2e
+```
+
+The multi-worker proof runs four complete jobs concurrently, confirms both
+worker identities receive successful attempts, verifies exact UUID-suffixed
+job/cancellation bindings, confirms legacy queues have no consumers, and
+finishes a real leased job as `CANCELLED`. The scheduler admits only workers
+with a fresh heartbeat, compatible operation capabilities, and an available
+authoritative lease slot. Commands and active cancellations are routed to
+UUID-suffixed worker queues. Legacy shared-queue
+compatibility is disabled by default. During a bounded upgrade cutover, the
+operator must enable it on no more than one designated worker; this deployment
+rule is intentionally not coordinated by the worker process itself.
+
 The verified identity endpoints are available under `/v1`: registration, login, refresh, logout, and owner-scoped API-key management. Dataset registration, owner-scoped listing/detail/deletion, streamed CSV/JSONL/Parquet version uploads, and presigned multipart sessions are also available. Multipart clients initiate a session, upload each server-scoped part URL, register its ETag/size, then complete with an ordered part list; Go verifies the assembled object before promoting the immutable version. Expired sessions are cleaned in bounded batches with `make cleanup`; in-flight completion receives the configured `PIPEFORGE_MULTIPART_COMPLETION_GRACE` window, and transient object-store errors remain retryable. The API returns a refresh token only at authentication/rotation time; API-key plaintext and MinIO credentials are never returned.
 
 You can inspect the plan and validate the worktree at any time:
@@ -81,7 +99,7 @@ git status --short
 Get-Content plans/20260801-1300-pipeforge-platform/plan.md
 ```
 
-The repository CI mirrors the local quality gates: Go format/test/race/vet, Python lint/format/type/test, contract validation, Compose configuration, and whitespace checks. The complete validation evidence and known limits are recorded in [the release package](docs/release/README.md).
+The repository CI mirrors the local quality gates: Go format/test/race/vet, Python lint/format/type/test, contract validation, Compose configuration, console build, and whitespace checks. The complete validation evidence and known limits are recorded in [the release package](docs/release/README.md).
 
 ![PipeForge system architecture](docs/assets/images/system-architecture.png)
 
