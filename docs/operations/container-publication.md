@@ -16,7 +16,7 @@ deployment or support commitment.
 
 Each publication writes the same two tags to both registries:
 
-- the release version, such as `0.2.1-local`;
+- the release version, such as `0.2.2-local`;
 - `sha-<full-40-character-source-commit>` for source traceability.
 
 The prerelease intentionally has no `latest` tag.
@@ -26,8 +26,8 @@ The prerelease intentionally has no `latest` tag.
 Pull a convenient version tag for evaluation:
 
 ```text
-docker pull ghcr.io/jasontm17/pipeforge-api:0.2.1-local
-docker pull nguyenson1710/pipeforge-api:0.2.1-local
+docker pull ghcr.io/jasontm17/pipeforge-api:0.2.2-local
+docker pull nguyenson1710/pipeforge-api:0.2.2-local
 ```
 
 For repeatable automation, copy a digest from the successful workflow's
@@ -40,7 +40,7 @@ docker pull ghcr.io/jasontm17/pipeforge-api@sha256:<digest>
 Verify GitHub build provenance against this repository:
 
 ```text
-gh attestation verify oci://ghcr.io/jasontm17/pipeforge-api:0.2.1-local -R JasonTM17/PipeForge
+gh attestation verify oci://ghcr.io/jasontm17/pipeforge-api:0.2.2-local -R JasonTM17/PipeForge
 ```
 
 Public GHCR images and public Docker Hub images can be pulled anonymously.

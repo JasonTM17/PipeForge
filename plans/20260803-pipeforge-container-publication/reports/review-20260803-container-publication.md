@@ -12,7 +12,7 @@ Date: 2026-08-03
 
 ## Critical pass
 
-No blocking finding.
+No remaining blocking finding after the scanner and base-image corrections.
 
 - Workflow is not reachable from pull-request code and grants package/OIDC
   permissions only to the publish job.
@@ -20,9 +20,11 @@ No blocking finding.
   the job-scoped `GITHUB_TOKEN`.
 - Third-party actions are pinned to full commit SHAs.
 - Publication rejects malformed versions and non-full source SHAs.
-- Existing `0.2.0-local` is not overwritten; new images use `0.2.1-local`.
+- Existing `0.2.0-local` is not overwritten. The first `0.2.1-local` remote
+  publication pushed images but failed while bootstrapping the scanner, so it
+  remains failed evidence and the corrected release uses `0.2.2-local`.
 - All images run as `pipeforge`; each published role has a fixed entrypoint.
-- Trivy 0.72.0 reports zero fixed HIGH or CRITICAL findings for representative
+- Trivy 0.73.0 reports zero fixed HIGH or CRITICAL findings for representative
   Go/Alpine and Python/Debian images.
 
 ## Informational pass
@@ -37,6 +39,19 @@ No blocking finding.
 - Multi-architecture manifest assembly, remote registry scan, anonymous pull,
   attestation verification, and immutable digest comparison remain release-job
   gates and must be recorded after merge.
+
+## First publication incident
+
+Run `30806374389` built and pushed all five images, then all matrix jobs failed
+before scanning because `trivy-action` could not install its default Trivy
+0.65.0 binary. Local Trivy scans had already passed. The corrected gate runs
+the official Trivy 0.73.0 container pinned to its immutable multi-platform
+digest, eliminating the failing installer path while preserving the same
+HIGH/CRITICAL policy.
+
+The corrected local scan also identified that Alpine 3.20 had reached end of
+support. The Go runtime base is therefore pinned to supported Alpine 3.23.5
+before the corrected release.
 
 ## Residual limits
 
