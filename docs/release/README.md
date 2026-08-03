@@ -1,6 +1,6 @@
 # PipeForge local learning release
 
-Version: `0.2.2-local`
+Version: `0.2.3-local`
 
 This folder is the release evidence for the verified local runtime. It is not
 a production certification and does not claim cloud availability, autoscaling,
@@ -12,6 +12,8 @@ multi-region scheduling, or a finalized license.
 - [known-limitations.md](./known-limitations.md) — deliberate non-goals and
   operational caveats.
 - [release-notes.md](./release-notes.md) — user-visible release summary.
+- [container-0.2.3-evidence.md](./container-0.2.3-evidence.md) — current
+  dual-registry tags, digests, and workflow evidence.
 - [local-e2e-runbook](../operations/local-e2e-runbook.md) — reproducible demo.
 - [system architecture](../assets/images/system-architecture.png) and
   [job lifecycle](../assets/images/job-lifecycle.png) — rendered visuals.

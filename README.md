@@ -108,12 +108,12 @@ evidence and known limits are recorded in [the release package](docs/release/REA
 
 ## Published containers
 
-The `0.2.2-local` release publishes role-specific, non-root images for
+The `0.2.3-local` release publishes role-specific, non-root images for
 `linux/amd64` and `linux/arm64` to both GHCR and Docker Hub. For example:
 
 ```text
-docker pull ghcr.io/jasontm17/pipeforge-api:0.2.2-local
-docker pull nguyenson1710/pipeforge-worker:0.2.2-local
+docker pull ghcr.io/jasontm17/pipeforge-api:0.2.3-local
+docker pull nguyenson1710/pipeforge-worker:0.2.3-local
 ```
 
 Available image suffixes are `api`, `scheduler`, `result-consumer`, `migrate`,

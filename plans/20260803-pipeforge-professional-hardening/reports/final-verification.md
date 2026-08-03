@@ -2,7 +2,7 @@
 
 Date: 2026-08-03
 Branch: `improvement/professional-hardening`
-Status: local gates passed; remote PR gates pending
+Status: merged; main CI, CodeQL, and container publication passed
 
 ## Delivered
 
@@ -36,7 +36,7 @@ Status: local gates passed; remote PR gates pending
 | npm production audit | zero vulnerabilities |
 | Compose core E2E | `SUCCEEDED`; three artifacts; authorized download HTTP 200 |
 | Compose multi-worker | 4 jobs on 2 worker UUIDs; exact targeted bindings; zero legacy consumers; cancellation `CANCELLED` |
-| Packages | five public GHCR packages linked to `JasonTM17/PipeForge`; release workflow 30809299824 passed all publish jobs |
+| Packages | `0.2.3-local` published to five public GHCR packages and matching Docker Hub repositories; workflow 30816637498 passed all publish jobs |
 | CodeQL | sole open high alert verified as a false positive for a 256-bit opaque token lookup digest and dismissed with rationale |
 
 ## Race root cause
@@ -50,3 +50,11 @@ and rebuilt-scheduler E2E passed after the fix.
 ## Remaining owner decision
 
 - Select a repository license. No license was inferred or added.
+
+## Landing evidence
+
+- PR 16 rebase-merged to `main` at
+  `bb98949a0651eaedbd59b603626dbc233771be21`.
+- Main CI run 30816434671 and CodeQL run 30816434674 passed.
+- Container workflow 30816637498 published matching `0.2.3-local` and full-SHA
+  tags to GHCR and Docker Hub; all five digest pairs matched.
