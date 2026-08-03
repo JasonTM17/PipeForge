@@ -111,10 +111,11 @@ class HeartbeatController:
         self.events_exchange = events_exchange
         self.interval_seconds = interval_seconds
         self.clock = clock or (lambda: datetime.now(UTC))
+        self._started_at = self.clock()
         self._last_heartbeat: datetime | None = None
 
     async def publish_registration(self) -> None:
-        envelope = self.identity.registration_envelope(self.clock())
+        envelope = self.identity.registration_envelope(self._started_at)
         self.validator.validate_mapping(envelope.to_mapping())
         await self.publisher.publish(envelope, envelope.message_type)
         self.metrics.heartbeat_publications.labels(message_type=envelope.message_type).inc()
@@ -143,6 +144,7 @@ class HeartbeatController:
     ) -> None:
         while not stop_event.is_set():
             status, current_job_ids = snapshot()
+            await self.publish_registration()
             await self.publish_heartbeat(status, current_job_ids)
             try:
                 await asyncio.wait_for(stop_event.wait(), timeout=self.interval_seconds)

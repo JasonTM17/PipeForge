@@ -1,8 +1,9 @@
 SHELL := /bin/sh
+POWERSHELL ?= powershell
 
 PLAN ?= plans/20260801-1300-pipeforge-platform/plan.md
 
-.PHONY: help plan-status validate-env bootstrap migrate dev e2e worker-test worker-lint worker-health cleanup down
+.PHONY: help plan-status validate-env bootstrap migrate dev e2e multi-worker-e2e worker-test worker-lint worker-health cleanup down
 
 help:
 	@printf '%s\n' 'PipeForge development targets:'
@@ -11,6 +12,7 @@ help:
 	@printf '%s\n' '  make migrate     Apply database migrations through the Compose tool service'
 	@printf '%s\n' '  make dev          Start the current Compose stack'
 	@printf '%s\n' '  make e2e          Run the disposable API-to-artifact Compose smoke test'
+	@printf '%s\n' '  make multi-worker-e2e Verify real job distribution across two workers'
 	@printf '%s\n' '  make worker-test  Run Python worker tests and type checks'
 	@printf '%s\n' '  make worker-lint  Run Python worker lint and format checks'
 	@printf '%s\n' '  make worker-health Start an explicit health-only worker'
@@ -18,15 +20,16 @@ help:
 	@printf '%s\n' '  make down         Stop PipeForge Compose services'
 	@printf '%s\n' '  make plan-status  Show the active CK implementation plan'
 	@printf '%s\n' '  make help         Show this message'
+	@printf '%s\n' '  Set POWERSHELL=pwsh on non-Windows hosts.'
 
 plan-status:
 	ck plan status "$(PLAN)"
 
 validate-env:
-	@powershell -NoProfile -ExecutionPolicy Bypass -File scripts/validate-env.ps1 -Path .env
+	@$(POWERSHELL) -NoProfile -ExecutionPolicy Bypass -File scripts/validate-env.ps1 -Path .env
 
 bootstrap:
-	@powershell -NoProfile -ExecutionPolicy Bypass -File scripts/bootstrap.ps1
+	@$(POWERSHELL) -NoProfile -ExecutionPolicy Bypass -File scripts/bootstrap.ps1
 
 migrate: validate-env
 	docker compose --profile tools run --rm migrate
@@ -35,7 +38,11 @@ dev: validate-env
 	docker compose up --build
 
 e2e: validate-env
-	@powershell -NoProfile -ExecutionPolicy Bypass -File scripts/e2e-compose.ps1
+	@$(POWERSHELL) -NoProfile -ExecutionPolicy Bypass -File scripts/e2e-compose.ps1
+
+multi-worker-e2e: validate-env
+	docker compose --profile multi-worker up -d --build
+	@$(POWERSHELL) -NoProfile -ExecutionPolicy Bypass -File scripts/e2e-multi-worker.ps1
 
 worker-test:
 	python/.venv/Scripts/python.exe -m pytest python/tests

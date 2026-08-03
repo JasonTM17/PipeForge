@@ -1,7 +1,10 @@
 [CmdletBinding()]
 param(
     [string]$BaseUrl = "http://localhost:58080",
-    [int]$TimeoutSeconds = 90
+    [int]$TimeoutSeconds = 90,
+    [switch]$VerifyCancellation,
+    [ValidateRange(100000, 2000000)]
+    [int]$CancellationRows = 750000
 )
 
 $ErrorActionPreference = "Stop"
@@ -45,15 +48,35 @@ $email = "e2e-$suffix@example.test"
 $password = "PipeForge-local-e2e-2026!"
 $csvPath = Join-Path ([System.IO.Path]::GetTempPath()) "pipeforge-e2e-$suffix.csv"
 $downloadPath = Join-Path ([System.IO.Path]::GetTempPath()) "pipeforge-e2e-$suffix-artifact.json"
+$curlCommand = Get-Command curl.exe, curl -CommandType Application -ErrorAction SilentlyContinue |
+    Select-Object -First 1
+if ($null -eq $curlCommand) {
+    throw "the local E2E requires the curl command-line client"
+}
 
 try {
-    @"
+    if ($VerifyCancellation) {
+        $utf8WithoutBom = [System.Text.UTF8Encoding]::new($false)
+        $writer = [System.IO.StreamWriter]::new($csvPath, $false, $utf8WithoutBom)
+        try {
+            $writer.WriteLine("customer_id,amount,email")
+            for ($row = 1; $row -le $CancellationRows; $row++) {
+                $writer.WriteLine("$row,$($row % 1000),user-$row@example.test")
+            }
+        }
+        finally {
+            $writer.Dispose()
+        }
+    }
+    else {
+        @"
 customer_id,amount,email
 1,10.5,alice@example.test
 2,11.0,
 3,11.0,bob@example.test
 4,9999.0,not-an-email
 "@ | Set-Content -LiteralPath $csvPath -Encoding UTF8
+    }
 
     $tokens = Invoke-JsonRequest -Method Post -Path "/v1/auth/register" -Body @{
         email = $email
@@ -68,7 +91,7 @@ customer_id,amount,email
         description = "Disposable local end-to-end fixture"
     }
 
-    $uploadBody = & curl.exe --fail-with-body --silent --show-error -X POST `
+    $uploadBody = & $curlCommand.Source --fail-with-body --silent --show-error -X POST `
         "$BaseUrl/v1/datasets/$($dataset.id)/versions" `
         -H "Authorization: Bearer $($tokens.accessToken)" `
         -H "X-Filename: fixture.csv" `
@@ -90,19 +113,42 @@ customer_id,amount,email
     }
 
     $deadline = (Get-Date).AddSeconds($TimeoutSeconds)
+    $cancelRequested = $false
     do {
-        Start-Sleep -Milliseconds 500
+        Start-Sleep -Milliseconds $(if ($VerifyCancellation) { 25 } else { 500 })
         $current = Invoke-JsonRequest -Method Get -Path "/api/v1/jobs/$($job.id)" -Token $tokens.accessToken
+        if ($VerifyCancellation -and -not $cancelRequested -and $current.state -in @("LEASED", "RUNNING")) {
+            $cancelled = Invoke-JsonRequest -Method Post -Path "/api/v1/jobs/$($job.id)/cancel" -Token $tokens.accessToken -Body @{
+                reason = "multi-worker targeted cancellation probe"
+            }
+            $cancelRequested = $true
+        }
         if ($current.state -in @("SUCCEEDED", "FAILED_PERMANENT", "DEAD_LETTERED", "CANCELLED")) {
             break
         }
     } while ((Get-Date) -lt $deadline)
 
+    if ($VerifyCancellation) {
+        if (-not $cancelRequested) {
+            throw "cancellation probe never observed a leased or running job"
+        }
+        Assert-Equal $current.state "CANCELLED" "targeted cancellation did not reach the lease owner"
+        [pscustomobject]@{
+            DatasetId = $dataset.id
+            VersionId = $version.id
+            JobId = $job.id
+            FinalState = $current.state
+            CancellationRequested = $cancelRequested
+            SourceRows = $CancellationRows
+        } | ConvertTo-Json -Compress
+        return
+    }
+
     Assert-Equal $current.state "SUCCEEDED" "local end-to-end job did not succeed"
     $artifacts = Invoke-JsonRequest -Method Get -Path "/api/v1/jobs/$($job.id)/artifacts?page=1&pageSize=20" -Token $tokens.accessToken
     Assert-Equal $artifacts.total 3 "local end-to-end job did not publish three artifacts"
 
-    $downloadStatus = & curl.exe --fail-with-body --silent --show-error `
+    $downloadStatus = & $curlCommand.Source --fail-with-body --silent --show-error `
         -o $downloadPath -w "%{http_code}" `
         "$BaseUrl/api/v1/artifacts/$($artifacts.items[0].id)/download" `
         -H "Authorization: Bearer $($tokens.accessToken)"

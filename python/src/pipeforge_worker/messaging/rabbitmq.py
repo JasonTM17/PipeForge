@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import logging
 from collections.abc import Mapping
+from dataclasses import dataclass
 from typing import Any, cast
 
 import aio_pika
@@ -20,6 +21,35 @@ from pipeforge_worker.messaging.protocols import (
 )
 
 
+def _validated_amqp_name(value: str, label: str) -> str:
+    normalized = value.strip()
+    if not normalized or any(ord(char) < 32 for char in normalized):
+        raise ValueError(f"{label} must be non-empty and free of control characters")
+    if len(normalized.encode("utf-8")) > 255:
+        raise ValueError(f"{label} must be at most 255 UTF-8 bytes")
+    return normalized
+
+
+@dataclass(frozen=True)
+class RabbitBinding:
+    """One durable topic-exchange binding for a consumer queue."""
+
+    exchange_name: str
+    routing_key: str
+
+    def __post_init__(self) -> None:
+        object.__setattr__(
+            self,
+            "exchange_name",
+            _validated_amqp_name(self.exchange_name, "binding exchange name"),
+        )
+        object.__setattr__(
+            self,
+            "routing_key",
+            _validated_amqp_name(self.routing_key, "binding routing key"),
+        )
+
+
 class RabbitPublisher(Publisher):
     def __init__(self, url: str, exchange_name: str, reconnect_delay_seconds: float = 2.0) -> None:
         self._url = url
@@ -28,7 +58,7 @@ class RabbitPublisher(Publisher):
         self._connection: Any = None
         self._channel: Any = None
         self._exchange: Any = None
-        self._lock = __import__("asyncio").Lock()
+        self._lock = asyncio.Lock()
         self._logger = logging.getLogger(__name__)
 
     async def connect(self) -> None:
@@ -95,12 +125,18 @@ class RabbitConsumer(Consumer):
         prefetch_count: int,
         queue_arguments: Mapping[str, object] | None = None,
         reconnect_delay_seconds: float = 2.0,
+        bindings: tuple[RabbitBinding, ...] = (),
     ) -> None:
         self._url = url
-        self._queue_name = queue_name
+        self._queue_name = _validated_amqp_name(queue_name, "queue name")
+        if not 1 <= prefetch_count <= 1000:
+            raise ValueError("prefetch count must be between 1 and 1000")
+        if not 0.1 <= reconnect_delay_seconds <= 300:
+            raise ValueError("reconnect delay must be between 0.1 and 300 seconds")
         self._prefetch_count = prefetch_count
         self._queue_arguments = dict(queue_arguments or {})
         self._reconnect_delay_seconds = reconnect_delay_seconds
+        self._bindings = bindings
         self._connection: Any = None
         self._channel: Any = None
         self._queue: Any = None
@@ -120,6 +156,13 @@ class RabbitConsumer(Consumer):
             durable=True,
             arguments=cast(Any, self._queue_arguments),
         )
+        for binding in self._bindings:
+            exchange = await self._channel.declare_exchange(
+                binding.exchange_name,
+                ExchangeType.TOPIC,
+                durable=True,
+            )
+            await self._queue.bind(exchange, routing_key=binding.routing_key)
         self._consumer_tag = await self._queue.consume(
             lambda message: self._settle(message, handler), no_ack=False
         )
@@ -156,10 +199,22 @@ class RabbitConsumer(Consumer):
 class CompositeConsumer(Consumer):
     """Start and drain multiple queues behind the runtime's one consumer boundary."""
 
-    def __init__(self, consumers: tuple[Consumer, ...]) -> None:
+    def __init__(
+        self,
+        consumers: tuple[Consumer, ...],
+        shutdown_groups: tuple[tuple[Consumer, ...], ...] | None = None,
+    ) -> None:
         if not consumers:
             raise ValueError("at least one consumer is required")
         self._consumers = consumers
+        self._shutdown_groups = shutdown_groups or tuple(
+            (consumer,) for consumer in reversed(consumers)
+        )
+        grouped = tuple(consumer for group in self._shutdown_groups for consumer in group)
+        if len(grouped) != len(consumers) or {id(item) for item in grouped} != {
+            id(item) for item in consumers
+        }:
+            raise ValueError("shutdown groups must contain every consumer exactly once")
 
     async def start(self, handler: MessageHandler) -> None:
         started: list[Consumer] = []
@@ -173,5 +228,11 @@ class CompositeConsumer(Consumer):
             raise
 
     async def stop(self) -> None:
-        for consumer in reversed(self._consumers):
-            await consumer.stop()
+        failures: list[Exception] = []
+        for group in self._shutdown_groups:
+            results = await asyncio.gather(
+                *(consumer.stop() for consumer in group), return_exceptions=True
+            )
+            failures.extend(result for result in results if isinstance(result, Exception))
+        if failures:
+            raise ExceptionGroup("one or more RabbitMQ consumers failed to stop", failures)

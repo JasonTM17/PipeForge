@@ -91,6 +91,13 @@ class Settings(BaseSettings):
             "PIPEFORGE_WORKER_CANCELLATION_QUEUE", "WORKER_CANCELLATION_QUEUE"
         ),
     )
+    legacy_shared_queue_compatibility: bool = Field(
+        default=False,
+        validation_alias=AliasChoices(
+            "PIPEFORGE_WORKER_LEGACY_SHARED_QUEUE_COMPATIBILITY",
+            "WORKER_LEGACY_SHARED_QUEUE_COMPATIBILITY",
+        ),
+    )
     dead_letter_exchange: str = Field(
         default="pipeforge.dead-letter",
         validation_alias=AliasChoices("PIPEFORGE_WORKER_DLX", "WORKER_DLX"),
@@ -251,6 +258,27 @@ class Settings(BaseSettings):
             raise ValueError(f"contracts directory does not exist: {self.contracts_dir}")
         return self
 
+    @property
+    def worker_routing_suffix(self) -> str:
+        """Canonical worker identity used by queue names and topic routing keys."""
+        return str(self.worker_id)
+
+    @property
+    def job_queue_name(self) -> str:
+        return f"{self.broker_queue}.{self.worker_routing_suffix}"
+
+    @property
+    def cancellation_queue_name(self) -> str:
+        return f"{self.cancellation_queue}.{self.worker_routing_suffix}"
+
+    @property
+    def job_routing_key(self) -> str:
+        return f"processing.job.requested.{self.worker_routing_suffix}"
+
+    @property
+    def cancellation_routing_key(self) -> str:
+        return f"processing.job.cancel-requested.{self.worker_routing_suffix}"
+
 
 class RedactedSettings(BaseModel):
     """Safe settings projection for diagnostics and structured logs."""
@@ -263,6 +291,7 @@ class RedactedSettings(BaseModel):
     prefetch_count: int
     broker_queue: str
     cancellation_queue: str
+    legacy_shared_queue_compatibility: bool
     health_host: str
     health_port: int
     health_only: bool
@@ -276,8 +305,9 @@ def redacted_settings(settings: Settings) -> RedactedSettings:
         software_version=settings.software_version,
         max_concurrency=settings.max_concurrency,
         prefetch_count=settings.prefetch_count,
-        broker_queue=settings.broker_queue,
-        cancellation_queue=settings.cancellation_queue,
+        broker_queue=settings.job_queue_name,
+        cancellation_queue=settings.cancellation_queue_name,
+        legacy_shared_queue_compatibility=settings.legacy_shared_queue_compatibility,
         health_host=settings.health_host,
         health_port=settings.health_port,
         health_only=settings.health_only,

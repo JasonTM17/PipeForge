@@ -47,9 +47,7 @@ class HealthState:
 
     def is_ready(self) -> bool:
         snapshot = self.snapshot()
-        return snapshot["status"] in {"READY", "BUSY", "DRAINING"} and all(
-            snapshot["dependencies"].values()
-        )
+        return snapshot["status"] in {"READY", "BUSY"} and all(snapshot["dependencies"].values())
 
 
 class HealthServer:

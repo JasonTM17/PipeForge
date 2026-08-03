@@ -44,3 +44,6 @@ def test_health_state_caps_job_visibility_and_tracks_readiness() -> None:
     assert state.is_ready() is True
     assert snapshot["currentConcurrency"] == 128
     assert snapshot["maxConcurrency"] == 2
+
+    state.set_status("DRAINING")
+    assert state.is_ready() is False

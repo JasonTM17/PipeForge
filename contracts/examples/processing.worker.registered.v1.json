@@ -11,7 +11,7 @@
     "instanceId": "worker-instance-1",
     "hostname": "pipeforge-worker-1",
     "supportedOperations": ["PROFILE_DATASET", "CHECK_MISSING_VALUES"],
-    "softwareVersion": "0.1.0",
+    "softwareVersion": "0.2.0",
     "maxConcurrency": 2,
     "startedAt": "2026-08-01T11:58:00Z"
   }
