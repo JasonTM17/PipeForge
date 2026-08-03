@@ -26,9 +26,16 @@
 - SHA-256: `53D2F3460613A7EFD3B7FB1A872C6AA50D4BB739A99C3940C5403DBF44C0E78F`
 - Nested release archives: none
 
+## Published release
+
+- Tag: `v0.2.0-local`
+- Target: `dd3448e79261e5e54f6d5777d7a2687177b6d1f5`
+- GitHub prerelease: <https://github.com/JasonTM17/PipeForge/releases/tag/v0.2.0-local>
+- Uploaded asset digest matches the local SHA-256.
+
 ## Remaining
 
-- Publish immutable `v0.2.0-local` prerelease after the package commit passes CI.
+- None in this hardening plan.
 
 ## Unresolved questions
 
